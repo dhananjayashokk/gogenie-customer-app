@@ -33,29 +33,29 @@ function AuthenticatedApp() {
     return <Loading message="Loading..." />;
   }
 
-  // Show auth screens if user is not authenticated
-  if (!state.isAuthenticated) {
-    return (
-      <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/onboarding" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      </NavigationThemeProvider>
-    );
-  }
+  // One navigator with two protected groups. When the auth state flips (sign in / sign out), expo-router
+  // moves to the first screen of the group that is now allowed: login when signed out, the tabs when signed in.
+  const signedIn = state.isAuthenticated;
 
-  // Show main app screens for authenticated users
   return (
     <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="store/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="category/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/onboarding" options={{ headerShown: false }} />
+        </Stack.Protected>
+
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="store/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="category/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
+        </Stack.Protected>
+
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />

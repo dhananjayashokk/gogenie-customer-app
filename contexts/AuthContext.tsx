@@ -1,6 +1,5 @@
 import { ApiService } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
 import React, {
   createContext,
   ReactNode,
@@ -291,15 +290,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async (): Promise<void> => {
     try {
       await AsyncStorage.multiRemove(["user", "accessToken", "refreshToken"]);
-      dispatch({ type: "LOGOUT" });
-      // Navigate to login page
-      router.replace("/auth/login");
     } catch (error) {
       console.error("Error during logout:", error);
-      dispatch({ type: "LOGOUT" });
-      // Navigate to login page even if there was an error
-      router.replace("/auth/login");
     }
+    // The root layout's protected route groups take the user to the login screen once auth state flips
+    dispatch({ type: "LOGOUT" });
   };
 
   const clearPhoneNumber = () => {

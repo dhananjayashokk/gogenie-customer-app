@@ -7,12 +7,14 @@ import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { ApiService } from '@/services/api';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/AppText';
 
 // Orders that are finished one way or another are not "active"
 const FINISHED_STATUSES = ['delivered', 'completed', 'rejected', 'cancelled'];
 const POLL_MS = 15000;
+const MAX_VISIBLE_ROWS = 3; // the expanded list shows this many orders at once; the rest scroll
+const ROW_HEIGHT = 64;
 const FALLBACK_TAB_BAR_HEIGHT = 90; // used until the floating tab bar has reported its measured height
 
 // The order closest to arriving is the one worth showing first
@@ -132,6 +134,11 @@ export default function ActiveOrders({
           {/* Expanded list: every active order */}
           {expanded && (
             <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border, ...Layout.shadow.md }]}>
+              <ScrollView
+                style={{ maxHeight: ROW_HEIGHT * MAX_VISIBLE_ROWS }}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={orders.length > MAX_VISIBLE_ROWS}
+              >
               {orders.map((order, index) => {
                 const color = statusColor(order.status);
                 return (
@@ -158,6 +165,7 @@ export default function ActiveOrders({
                   </TouchableOpacity>
                 );
               })}
+              </ScrollView>
             </View>
           )}
 
@@ -171,7 +179,7 @@ export default function ActiveOrders({
               <Text style={[styles.countText, { color: colors.textInverse }]}>{orders.length}</Text>
             </View>
             <Text style={[styles.stripText, { color: colors.text }]} numberOfLines={1}>
-              {orders.length} active orders · {infoFor(first.status).label}
+              {orders.length} active orders · {expanded && orders.length > MAX_VISIBLE_ROWS ? `scroll for all ${orders.length}` : infoFor(first.status).label}
             </Text>
             <IconSymbol name={expanded ? 'chevron.down' : 'chevron.up'} size={20} color={firstColor} />
           </TouchableOpacity>
@@ -207,6 +215,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: ROW_HEIGHT,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     gap: 10,
