@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Platform, Text as RNText } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Platform, Text as RNText } from 'react-native';
+import { TextInput } from '@/components/AppText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { Layout, Spacing } from '@/constants/Layout';

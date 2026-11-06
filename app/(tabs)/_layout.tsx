@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, View, Text } from 'react-native';
+import { Platform, View } from 'react-native';
+import { Text } from '@/components/AppText';
 
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -10,6 +11,7 @@ import { Colors } from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
 import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { useCart } from '@/contexts/CartContext';
+import { TabBarHeightProvider } from '@/contexts/TabBarHeightContext';
 
 export default function TabLayout() {
   const colorScheme = useAppColorScheme();
@@ -17,6 +19,7 @@ export default function TabLayout() {
   const { state: cartState } = useCart();
 
   return (
+    <TabBarHeightProvider>
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
@@ -111,5 +114,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </TabBarHeightProvider>
   );
 }

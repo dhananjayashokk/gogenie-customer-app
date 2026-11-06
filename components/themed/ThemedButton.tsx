@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, Text, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
+import { StyleSheet, TouchableOpacity, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/AppText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { Colors } from '@/constants/Colors';

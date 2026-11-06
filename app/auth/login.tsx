@@ -1,4 +1,5 @@
 import { Colors } from "@/constants/Colors";
+import { useToast } from '@/contexts/ToastContext';
 import { Spacing } from "@/constants/Layout";
 import { TextStyles } from "@/constants/Typography";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,14 +8,8 @@ import { ApiService } from "@/services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/components/AppText";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Customer {
@@ -29,6 +24,7 @@ interface Customer {
 export default function LoginScreen() {
   const colorScheme = useAppColorScheme();
   const colors = Colors[colorScheme];
+  const { show: showToast } = useToast();
   const { authenticateWithMobile, state } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -66,7 +62,7 @@ export default function LoginScreen() {
       );
 
       if (result.success) {
-        Alert.alert("Success", `Welcome, ${customer.name}!`);
+        showToast(`Welcome, ${customer.name}!`, 'success');
         router.replace("/(tabs)");
       } else {
         // Fallback to old demo login method if API fails
@@ -88,7 +84,7 @@ export default function LoginScreen() {
       }
     } catch (error) {
       console.error("Error during demo login:", error);
-      Alert.alert("Error", "Failed to login with demo customer");
+      showToast("Failed to login with demo customer", 'error');
     }
   };
 
@@ -116,7 +112,7 @@ export default function LoginScreen() {
 
   const handleMobileAuth = async () => {
     if (!phoneNumber || phoneNumber.length < 10) {
-      Alert.alert("Error", "Please enter a valid phone number");
+      showToast("Please enter a valid phone number", 'error');
       return;
     }
 
@@ -125,7 +121,7 @@ export default function LoginScreen() {
       const result = await authenticateWithMobile(phoneNumber);
 
       if (result.success) {
-        Alert.alert("Success", result.message);
+        showToast(result.message, 'success');
         router.replace("/(tabs)");
       } else if (
         result.message?.includes("new customer") ||
@@ -133,17 +129,14 @@ export default function LoginScreen() {
       ) {
         // Customer doesn't exist, show name field
         setShowNameField(true);
-        Alert.alert(
-          "New Customer",
-          "Please provide your name to create an account"
-        );
+        showToast("Please provide your name to create an account", 'info');
       } else {
-        Alert.alert("Error", result.message);
+        showToast(result.message, 'error');
       }
     } else {
       // Try with name for new customer
       if (!customerName.trim()) {
-        Alert.alert("Error", "Please enter your name");
+        showToast("Please enter your name", 'error');
         return;
       }
 
@@ -153,19 +146,16 @@ export default function LoginScreen() {
       );
 
       if (result.success) {
-        Alert.alert("Success", result.message);
+        showToast(result.message, 'success');
         router.replace("/(tabs)");
       } else {
-        Alert.alert("Error", result.message);
+        showToast(result.message, 'error');
       }
     }
   };
 
   const handleSocialLogin = (provider: string) => {
-    Alert.alert(
-      "Info",
-      `${provider} login integration would be implemented here`
-    );
+    showToast(`${provider} login integration would be implemented here`, 'info');
   };
 
   return (

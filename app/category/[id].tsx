@@ -1,4 +1,5 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, FlatList } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, FlatList } from 'react-native';
+import { Text } from '@/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';

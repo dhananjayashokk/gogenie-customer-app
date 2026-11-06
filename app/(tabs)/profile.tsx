@@ -1,263 +1,157 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Switch, Alert, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text } from '@/components/AppText';
+import ConfirmModal from '@/components/ConfirmModal';
+import { Badge } from '@/components/ui/Badge';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { Layout, Spacing } from '@/constants/Layout';
-import { Typography, TextStyles } from '@/constants/Typography';
-import { useTheme } from '@/contexts/ThemeContext';
+import { Spacing } from '@/constants/Layout';
+import { Typography } from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useState } from 'react';
-import { useRefresh, simulateDataFetch } from '@/hooks/useRefresh';
-import ConfirmModal from '@/components/ConfirmModal';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const THEMES = [
+  { key: 'light', label: 'Light', icon: 'sun.max' },
+  { key: 'dark', label: 'Dark', icon: 'moon' },
+  { key: 'system', label: 'System', icon: 'gear' },
+] as const;
+
+const initialsOf = (name?: string) =>
+  (name || '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || '?';
+
+const formatPhone = (phone?: string) => {
+  if (!phone) return '';
+  if (phone.startsWith('+')) return phone;
+  return `+91 ${phone}`;
+};
 
 export default function ProfileScreen() {
-  const { colorScheme, themePreference, setThemePreference, toggleTheme } = useTheme();
-  const { state, logout } = useAuth();
+  const { colorScheme, themePreference, setThemePreference } = useTheme();
   const colors = Colors[colorScheme];
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const { state, logout } = useAuth();
+  const { show: showToast } = useToast();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // Pull-to-refresh functionality
-  const { refreshing, onRefresh } = useRefresh(async () => {
-    await simulateDataFetch(1000); // Simulate loading profile data
-  });
-
-  const handleThemeToggle = () => {
-    toggleTheme();
-  };
-
-  const getThemeDisplayText = () => {
-    switch (themePreference) {
-      case 'light': return 'Light Mode';
-      case 'dark': return 'Dark Mode';
-      case 'system': return 'System Default';
-      default: return 'System Default';
-    }
-  };
-
-  const handleLogout = () => {
-    console.log('🚪 Logout button pressed!');
-    setShowLogoutModal(true);
-  };
+  const comingSoon = () => showToast("This isn't available yet. Coming soon!", 'info');
 
   const confirmLogout = async () => {
-    console.log('🚪 User confirmed logout, calling logout function...');
     setShowLogoutModal(false);
     try {
       await logout();
-      console.log('🚪 Logout completed successfully');
-    } catch (error) {
-      console.error('🚪 Logout error:', error);
-      Alert.alert('Error', 'Failed to sign out. Please try again.');
+    } catch {
+      showToast('Failed to sign out. Please try again.', 'error');
     }
   };
 
-  const cancelLogout = () => {
-    console.log('🚪 User cancelled logout');
-    setShowLogoutModal(false);
-  };
-
-  const profileSections = [
+  // Rows that are not built yet are marked "Soon" instead of silently doing nothing
+  const sections = [
     {
       title: 'Account',
-      items: [
-        { icon: 'person.circle', label: 'Edit Profile', arrow: true },
-        { icon: 'location', label: 'Manage Addresses', arrow: true },
-        { icon: 'creditcard', label: 'Payment Methods', arrow: true },
-      ],
-    },
-    {
-      title: 'Preferences',
-      items: [
-        { 
-          icon: themePreference === 'dark' ? 'moon.fill' : themePreference === 'light' ? 'sun.max.fill' : 'circle.lefthalf.filled', 
-          label: 'Theme', 
-          arrow: true, 
-          value: getThemeDisplayText(),
-          onPress: () => {
-            Alert.alert(
-              'Choose Theme',
-              'Select your preferred theme',
-              [
-                { text: 'Light Mode', onPress: () => setThemePreference('light') },
-                { text: 'Dark Mode', onPress: () => setThemePreference('dark') },
-                { text: 'System Default', onPress: () => setThemePreference('system') },
-                { text: 'Cancel', style: 'cancel' },
-              ]
-            );
-          }
-        },
-        { icon: 'bell', label: 'Notifications', toggle: true, value: notificationsEnabled, onToggle: setNotificationsEnabled },
-        { icon: 'globe', label: 'Language', arrow: true, value: 'English' },
+      rows: [
+        { icon: 'person.circle', label: 'Edit profile' },
+        { icon: 'location', label: 'Saved addresses' },
+        { icon: 'creditcard', label: 'Payment methods' },
       ],
     },
     {
       title: 'Support',
-      items: [
-        { icon: 'questionmark.circle', label: 'Help Center', arrow: true },
-        { icon: 'star', label: 'Rate Us', arrow: true },
-        { icon: 'doc.text', label: 'Terms & Conditions', arrow: true },
-        { icon: 'shield', label: 'Privacy Policy', arrow: true },
-      ],
-    },
-    {
-      title: 'More',
-      items: [
-        { icon: 'info.circle', label: 'About Us', arrow: true },
-        { icon: 'arrow.right.square', label: 'Sign Out', arrow: true, danger: true, onPress: handleLogout },
+      rows: [
+        { icon: 'questionmark.circle', label: 'Help center' },
+        { icon: 'doc.text', label: 'Terms & conditions' },
+        { icon: 'shield', label: 'Privacy policy' },
       ],
     },
   ];
 
-  const renderSettingItem = (item: any, isLast: boolean) => (
-    <TouchableOpacity
-      key={item.label}
-      style={[
-        styles.settingItem,
-        !isLast && { borderBottomColor: colors.divider, borderBottomWidth: 1 },
-      ]}
-      activeOpacity={item.toggle ? 1 : 0.7}
-      onPress={() => {
-        console.log(`💆 Clicked on: ${item.label}`);
-        if (item.onPress) {
-          console.log(`💆 Calling onPress for: ${item.label}`);
-          item.onPress();
-        } else {
-          console.log(`💆 No onPress found for: ${item.label}`);
-        }
-      }}
-    >
-      <View style={styles.settingLeft}>
-        <IconSymbol 
-          name={item.icon} 
-          size={22} 
-          color={item.danger ? colors.error : colors.textSecondary} 
-        />
-        <Text style={[
-          styles.settingLabel, 
-          { color: item.danger ? colors.error : colors.text }
-        ]}>
-          {item.label}
-        </Text>
-      </View>
-      <View style={styles.settingRight}>
-        {item.value && typeof item.value === 'string' && (
-          <Text style={[styles.settingValue, { color: colors.textSecondary }]}>
-            {item.value}
-          </Text>
-        )}
-        {item.toggle && (
-          <Switch
-            value={item.value}
-            onValueChange={item.onToggle}
-            trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={colors.background}
-          />
-        )}
-        {item.arrow && (
-          <IconSymbol 
-            name="chevron.right" 
-            size={18} 
-            color={colors.textTertiary} 
-          />
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.divider }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-        <TouchableOpacity>
-          <IconSymbol name="gearshape" size={24} color={colors.text} />
-        </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        {/* Profile Info */}
-        <View style={[styles.profileCard, { backgroundColor: colors.surface }]}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary + '20' }]}>
-            <Text style={[styles.avatarText, { color: colors.primary }]}>DK</Text>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Account card */}
+        <View style={[styles.profileCard, { backgroundColor: colors.primary }]}>
+          <View style={[styles.avatar, { backgroundColor: colors.textInverse + '26' }]}>
+            <Text style={[styles.avatarText, { color: colors.textInverse }]}>{initialsOf(state.user?.name)}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={[styles.userName, { color: colors.text }]}>
-              {state.user?.name || 'User'}
+            <Text style={[styles.userName, { color: colors.textInverse }]} numberOfLines={1}>
+              {state.user?.name || 'Guest'}
             </Text>
-            <Text style={[styles.userPhone, { color: colors.textSecondary }]}>
-              +91 {state.user?.phoneNumber || 'XXXXXXXXXX'}
+            <Text style={[styles.userPhone, { color: colors.textInverse + 'D9' }]}>
+              {formatPhone(state.user?.phoneNumber)}
             </Text>
-            <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
-              {state.user?.email || 'No email provided'}
-            </Text>
+            {!!state.user?.email && (
+              <Text style={[styles.userPhone, { color: colors.textInverse + 'D9' }]} numberOfLines={1}>
+                {state.user.email}
+              </Text>
+            )}
           </View>
-          <TouchableOpacity 
-            style={[styles.editButton, { backgroundColor: colors.primary + '15' }]}
-            activeOpacity={0.7}
-          >
-            <IconSymbol name="pencil" size={18} color={colors.primary} />
-          </TouchableOpacity>
         </View>
 
-        {/* Membership Card */}
-        <View style={[styles.membershipCard, { 
-          backgroundColor: colors.accent + '20',
-          borderColor: colors.accent,
-        }]}>
-          <View style={styles.membershipContent}>
-            <IconSymbol name="star.fill" size={24} color={colors.accent} />
-            <View style={styles.membershipInfo}>
-              <Text style={[styles.membershipTitle, { color: colors.text }]}>
-                Gold Member
-              </Text>
-              <Text style={[styles.membershipSubtitle, { color: colors.textSecondary }]}>
-                You've saved ₹2,340 this month
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity>
-            <Text style={[styles.membershipAction, { color: colors.primary }]}>
-              View Benefits
-            </Text>
-          </TouchableOpacity>
+        {/* Appearance */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Appearance</Text>
+        <View style={[styles.card, styles.themeRow, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+          {THEMES.map(({ key, label, icon }) => {
+            const selected = themePreference === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                activeOpacity={0.8}
+                onPress={() => setThemePreference(key)}
+                style={[styles.themeOption, selected && { backgroundColor: colors.primary + '1A', borderColor: colors.primary }]}
+              >
+                <IconSymbol name={icon as any} size={20} color={selected ? colors.primary : colors.textSecondary} />
+                <Text style={[styles.themeLabel, { color: selected ? colors.primary : colors.textSecondary }]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* Settings Sections */}
-        {profileSections.map((section, sectionIndex) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-              {section.title}
-            </Text>
-            <View style={[styles.sectionContent, { backgroundColor: colors.surface }]}>
-              {section.items.map((item, index) => 
-                renderSettingItem(item, index === section.items.length - 1)
-              )}
+        {sections.map((section) => (
+          <View key={section.title}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{section.title}</Text>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+              {section.rows.map((row, index) => (
+                <TouchableOpacity
+                  key={row.label}
+                  activeOpacity={0.7}
+                  onPress={comingSoon}
+                  style={[styles.row, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider }]}
+                >
+                  <View style={[styles.rowIcon, { backgroundColor: colors.primary + '14' }]}>
+                    <IconSymbol name={row.icon as any} size={18} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.rowLabel, { color: colors.text }]}>{row.label}</Text>
+                  <Badge label="Soon" tone="neutral" />
+                  <IconSymbol name="chevron.right" size={16} color={colors.textTertiary} />
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         ))}
 
-        {/* App Version */}
-        <View style={styles.versionContainer}>
-          <Text style={[styles.versionText, { color: colors.textTertiary }]}>
-            GoGenie v1.0.0
-          </Text>
-        </View>
+        {/* Sign out */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setShowLogoutModal(true)}
+          style={[styles.signOut, { borderColor: colors.error + '66', backgroundColor: colors.error + '0F' }]}
+        >
+          <IconSymbol name="arrow.right.square" size={20} color={colors.error} />
+          <Text style={[styles.signOutText, { color: colors.error }]}>Sign out</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.version, { color: colors.textTertiary }]}>GoGenie v1.0.0</Text>
       </ScrollView>
 
-      {/* Logout Confirmation Modal */}
       <ConfirmModal
         visible={showLogoutModal}
         title="Sign Out"
@@ -265,7 +159,7 @@ export default function ProfileScreen() {
         confirmText="Sign Out"
         cancelText="Cancel"
         onConfirm={confirmLogout}
-        onCancel={cancelLogout}
+        onCancel={() => setShowLogoutModal(false)}
         danger
       />
     </SafeAreaView>
@@ -273,142 +167,51 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  headerTitle: {
-    ...TextStyles.h4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: Spacing.xxxl,
-  },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    borderRadius: Layout.card.borderRadius,
-    ...Layout.shadow.sm,
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Spacing.md,
-  },
-  avatarText: {
-    ...TextStyles.h4,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  userName: {
-    ...TextStyles.bodyLarge,
-    fontWeight: Typography.fontWeight.semibold,
-    marginBottom: Spacing.xxs,
-  },
-  userPhone: {
-    ...TextStyles.bodySmall,
-    marginBottom: Spacing.xxs,
-  },
-  userEmail: {
-    ...TextStyles.caption,
-  },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  membershipCard: {
-    padding: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    borderRadius: Layout.card.borderRadius,
-    borderWidth: 1,
-  },
-  membershipContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  membershipInfo: {
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  membershipTitle: {
-    ...TextStyles.bodyLarge,
-    fontWeight: Typography.fontWeight.semibold,
-    marginBottom: Spacing.xxs,
-  },
-  membershipSubtitle: {
-    ...TextStyles.bodySmall,
-  },
-  membershipAction: {
-    ...TextStyles.bodySmall,
-    fontWeight: Typography.fontWeight.semibold,
-  },
-  section: {
-    marginTop: Spacing.xl,
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
+  title: { fontSize: 24, fontWeight: Typography.fontWeight.bold },
+  content: { paddingHorizontal: Spacing.lg, paddingBottom: 130 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20, gap: 16, marginBottom: 8 },
+  avatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 24, fontWeight: Typography.fontWeight.bold },
+  profileInfo: { flex: 1, gap: 2 },
+  userName: { fontSize: 18, fontWeight: Typography.fontWeight.bold },
+  userPhone: { fontSize: 13 },
   sectionTitle: {
-    ...TextStyles.caption,
-    fontWeight: Typography.fontWeight.medium,
+    fontSize: 12,
+    fontWeight: Typography.fontWeight.semibold,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
-    letterSpacing: Typography.letterSpacing.wide,
-    marginLeft: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginTop: 18,
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  sectionContent: {
-    marginHorizontal: Spacing.lg,
-    borderRadius: Layout.card.borderRadius,
-    overflow: 'hidden',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  themeRow: { flexDirection: 'row', padding: 6, gap: 6 },
+  themeOption: {
     flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  settingLabel: {
-    ...TextStyles.body,
-    marginLeft: Spacing.md,
-  },
-  settingRight: {
+  themeLabel: { fontSize: 12, fontWeight: Typography.fontWeight.semibold },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 14 },
+  rowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  rowLabel: { flex: 1, fontSize: 15, fontWeight: Typography.fontWeight.medium },
+  signOut: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 24,
   },
-  settingValue: {
-    ...TextStyles.bodySmall,
-    marginRight: Spacing.sm,
-  },
-  versionContainer: {
-    alignItems: 'center',
-    marginTop: Spacing.xxxl,
-    marginBottom: Spacing.xl,
-  },
-  versionText: {
-    ...TextStyles.caption,
-  },
+  signOutText: { fontSize: 15, fontWeight: Typography.fontWeight.semibold },
+  version: { textAlign: 'center', fontSize: 12, marginTop: 18 },
 });

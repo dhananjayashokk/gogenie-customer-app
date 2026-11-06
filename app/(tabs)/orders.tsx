@@ -1,116 +1,91 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, RefreshControl, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { Text } from '@/components/AppText';
+import { Badge } from '@/components/ui/Badge';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Colors } from '@/constants/Colors';
-import { Layout, Spacing } from '@/constants/Layout';
-import { Typography, TextStyles } from '@/constants/Typography';
+import { Spacing } from '@/constants/Layout';
+import { Typography } from '@/constants/Typography';
+import { useCart } from '@/contexts/CartContext';
 import { useAppColorScheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { ApiService } from '@/services/api';
-import { useState, useEffect } from 'react';
+import { formatPrice } from '@/utils/product';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const FINISHED = ['delivered', 'completed', 'rejected', 'cancelled'];
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'past', label: 'Past' },
+] as const;
+type FilterKey = (typeof FILTERS)[number]['key'];
+
+const STATUS: Record<string, { label: string; tone: 'primary' | 'success' | 'warning' | 'error' | 'info' | 'neutral' }> = {
+  pending: { label: 'Order placed', tone: 'warning' },
+  confirmed: { label: 'Confirmed', tone: 'primary' },
+  partially_accepted: { label: 'Confirmed', tone: 'primary' },
+  preparing: { label: 'Preparing', tone: 'primary' },
+  ready_to_dispatch: { label: 'Ready', tone: 'primary' },
+  out_for_delivery: { label: 'Out for delivery', tone: 'info' },
+  delivered: { label: 'Delivered', tone: 'success' },
+  completed: { label: 'Delivered', tone: 'success' },
+  cancelled: { label: 'Cancelled', tone: 'error' },
+  rejected: { label: 'Rejected', tone: 'error' },
+};
+
+interface OrderRow {
+  id: number;
+  orderNumber: string;
+  storeName: string;
+  date: string;
+  status: string;
+  total: number;
+  paymentMethod?: string;
+  deliverySlot?: string | null;
+}
 
 export default function OrdersScreen() {
-  const colorScheme = useAppColorScheme();
-  const colors = Colors[colorScheme];
-  const [orders, setOrders] = useState<any[]>([]);
+  const colors = Colors[useAppColorScheme()];
+  const { show: showToast } = useToast();
+  const { state: cartState, addItem, updateQuantity, clearCart } = useCart();
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<any>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [filter, setFilter] = useState<FilterKey>('all');
+  const [reorderingId, setReorderingId] = useState<number | null>(null);
 
-  // Status color mapping
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'delivered': return colors.success;
-      case 'confirmed': return colors.primary;
-      case 'pending': return colors.warning;
-      case 'cancelled': return colors.error;
-      case 'out_for_delivery': return colors.info;
-      default: return colors.textSecondary;
-    }
-  };
-
-  // Get display label for status
-  const getStatusLabel = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'delivered': return 'Delivered';
-      case 'confirmed': return 'Confirmed';
-      case 'pending': return 'Pending';
-      case 'cancelled': return 'Cancelled';
-      case 'out_for_delivery': return 'Out for Delivery';
-      case 'order_preparing': return 'Preparing';
-      case 'ready_to_dispatch': return 'Ready';
-      default: return status.charAt(0).toUpperCase() + status.slice(1);
-    }
-  };
-
-  // Fetch orders from API
-  const fetchOrders = async (page = 1, status = 'all', isRefresh = false) => {
+  const fetchOrders = async (pageToLoad = 1, isRefresh = false) => {
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (isRefresh) setRefreshing(true);
+      else if (pageToLoad === 1) setLoading(true);
       setError(null);
 
-      const response = await ApiService.orders.getCustomerOrders({
-        page,
-        limit: 10,
-        status
-      });
+      const response = await ApiService.orders.getCustomerOrders({ page: pageToLoad, limit: 10, status: 'all' });
+      const rows: OrderRow[] = (response.data || response.orders || []).map((order: any) => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        storeName: order.store?.name || 'Store',
+        date: new Date(order.createdAt).toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+        status: String(order.orderStatus || 'pending').toLowerCase(),
+        total: parseFloat(order.totalAmount || '0'),
+        deliverySlot: order.deliverySlot,
+      }));
 
-      console.log('Orders API response:', response);
-
-      // Handle the actual API response structure
-      const ordersArray = response.data || response.orders || [];
-
-      const transformedOrders = ordersArray.map((order: any) => {
-        const rawStatus = order.orderStatus || order.status?.current || 'pending';
-        return {
-          id: order.id.toString(),
-          orderNumber: order.orderNumber,
-          storeName: order.store?.name || 'Store',
-          storeImage: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=80&h=80&fit=crop&crop=center',
-          date: new Date(order.createdAt || order.timestamps?.createdAt).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit'
-          }),
-          status: getStatusLabel(rawStatus),
-          statusColor: getStatusColor(rawStatus),
-          totalAmount: `₹${parseFloat(order.totalAmount || order.pricing?.totalAmount || '0').toFixed(0)}`,
-          itemCount: order.itemCount || order.items?.length || 0,
-          paymentStatus: order.paymentStatus || order.payment?.status || 'pending',
-          paymentMethod: order.payment?.method?.displayName || 'Cash on Delivery',
-          deliverySlot: order.deliverySlot || order.delivery?.slot ? new Date(order.deliverySlot || order.delivery?.slot).toLocaleDateString() : null,
-          specialInstructions: order.specialInstructions || order.delivery?.specialInstructions
-        };
-      });
-
-      if (page === 1) {
-        setOrders(transformedOrders);
-      } else {
-        setOrders(prev => [...prev, ...transformedOrders]);
-      }
-
-      // Handle pagination from API response
-      const paginationData = response.pagination || {
-        total: response.pagination?.totalItems || transformedOrders.length,
-        totalItems: response.pagination?.totalItems || transformedOrders.length,
-        page: response.pagination?.page || page,
-        limit: response.pagination?.limit || 10,
-        totalPages: response.pagination?.totalPages || 1,
-        hasMore: response.pagination?.hasMore || false
-      };
-      setPagination(paginationData);
-      setCurrentPage(page);
-
+      setOrders((previous) => (pageToLoad === 1 ? rows : [...previous, ...rows]));
+      setPage(pageToLoad);
+      setTotalPages(response.pagination?.totalPages || 1);
     } catch (err) {
-      console.error('Error fetching orders:', err);
       setError(err instanceof Error ? err.message : 'Failed to load orders');
     } finally {
       setLoading(false);
@@ -118,158 +93,184 @@ export default function OrdersScreen() {
     }
   };
 
-  // Load orders on component mount
   useEffect(() => {
     fetchOrders();
   }, []);
 
-  // Handle refresh
-  const onRefresh = () => {
-    fetchOrders(1, statusFilter, true);
+  // Put the items of a past order back in the cart
+  const reorder = async (order: OrderRow) => {
+    try {
+      setReorderingId(order.id);
+      const response = await ApiService.orders.getDeliveryOrderDetails(order.id);
+      const details = response.data || response.order || response;
+
+      const items = (details.items || [])
+        .map((item: any) => {
+          const rejected = ['rejected', 'out_of_stock'].includes(item.itemStatus);
+          const quantity = rejected ? 0 : item.quantityAccepted > 0 ? item.quantityAccepted : item.quantityOrdered;
+          return { item, quantity };
+        })
+        .filter(({ quantity }: any) => quantity > 0);
+
+      if (items.length === 0) {
+        showToast('There is nothing to reorder from this order', 'error');
+        return;
+      }
+
+      // The cart holds one store at a time
+      if (cartState.items.length > 0 && String(cartState.items[0].storeId) !== String(details.storeId)) clearCart();
+
+      items.forEach(({ item, quantity }: any) => {
+        addItem({
+          id: item.storeProductId,
+          name: item.product?.name || 'Product',
+          price: parseFloat(item.storeProduct?.price || item.unitPrice || '0'),
+          image: '',
+          category: '',
+          unit: 'piece',
+          storeId: details.storeId,
+          storeName: order.storeName,
+        });
+        updateQuantity(item.storeProductId, quantity);
+      });
+
+      showToast('Items added to your cart', 'success');
+      router.push('/(tabs)/cart');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not reorder', 'error');
+    } finally {
+      setReorderingId(null);
+    }
   };
 
-  // Handle order card press
-  const handleOrderPress = (orderId: string) => {
-    router.push(`/order/${orderId}`);
-  };
-
-  const getEmptyState = () => (
-    <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-      <IconSymbol name="receipt" size={64} color={colors.textTertiary} />
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>No Orders Yet</Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Your order history will appear here
-      </Text>
-      <TouchableOpacity 
-        style={[styles.shopButton, { backgroundColor: colors.primary }]}
-        activeOpacity={0.8}
-        onPress={() => router.push('/(tabs)')}
-      >
-        <Text style={[styles.shopButtonText, { color: colors.textInverse }]}>
-          Start Shopping
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const getErrorState = () => (
-    <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-      <IconSymbol name="exclamationmark.triangle" size={64} color={colors.error} />
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>Failed to Load Orders</Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        {error}
-      </Text>
-      <TouchableOpacity 
-        style={[styles.shopButton, { backgroundColor: colors.primary }]}
-        activeOpacity={0.8}
-        onPress={() => fetchOrders()}
-      >
-        <Text style={[styles.shopButtonText, { color: colors.textInverse }]}>
-          Try Again
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const getLoadingState = () => (
-    <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>Loading Orders...</Text>
-    </View>
+  const visible = orders.filter((order) =>
+    filter === 'all' ? true : filter === 'active' ? !FINISHED.includes(order.status) : FINISHED.includes(order.status)
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.divider }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>My Orders</Text>
-          {pagination && (
-            <Text style={[styles.orderCount, { color: colors.textSecondary }]}>
-              {pagination.totalItems || pagination.total || orders.length} total order{(pagination.totalItems || pagination.total || orders.length) !== 1 ? 's' : ''}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity onPress={onRefresh}>
-          <IconSymbol name="arrow.clockwise" size={24} color={colors.text} />
-        </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>My Orders</Text>
       </View>
 
-      {/* Orders List */}
-      <ScrollView 
-        style={styles.scrollView}
+      {/* Filter chips */}
+      <View style={styles.chips}>
+        {FILTERS.map(({ key, label }) => {
+          const selected = filter === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              activeOpacity={0.8}
+              onPress={() => setFilter(key)}
+              style={[
+                styles.chip,
+                { backgroundColor: selected ? colors.primary : colors.surface, borderColor: selected ? colors.primary : colors.border },
+              ]}
+            >
+              <Text style={[styles.chipText, { color: selected ? colors.textInverse : colors.textSecondary }]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchOrders(1, true)} tintColor={colors.primary} colors={[colors.primary]} />
         }
       >
-        {loading ? getLoadingState() : error ? getErrorState() : orders.length === 0 ? getEmptyState() : (
-          <>
-            {orders.map((order) => (
-              <TouchableOpacity 
+        {loading &&
+          [1, 2, 3].map((n) => (
+            <View key={n} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider, gap: 10 }]}>
+              <Skeleton width="55%" height={16} />
+              <Skeleton width="35%" height={12} />
+              <Skeleton width="100%" height={36} radius={10} />
+            </View>
+          ))}
+
+        {!loading && error && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Couldn't load your orders</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{error}</Text>
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => fetchOrders()}>
+              <Text style={[styles.buttonText, { color: colors.textInverse }]}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!loading && !error && visible.length === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyEmoji}>🧾</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {filter === 'all' ? 'No orders yet' : filter === 'active' ? 'No active orders' : 'No past orders'}
+            </Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Your orders will show up here.</Text>
+            {filter === 'all' && (
+              <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => router.push('/(tabs)')}>
+                <Text style={[styles.buttonText, { color: colors.textInverse }]}>Start shopping</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {!loading &&
+          !error &&
+          visible.map((order) => {
+            const info = STATUS[order.status] || { label: order.status.replace(/_/g, ' '), tone: 'neutral' as const };
+            const active = !FINISHED.includes(order.status);
+            return (
+              <TouchableOpacity
                 key={order.id}
-                style={[styles.orderCard, { 
-                  backgroundColor: colors.surface,
-                  ...Layout.shadow.md 
-                }]}
-                activeOpacity={0.7}
-                onPress={() => handleOrderPress(order.id)}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/order/${order.id}`)}
+                style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}
               >
-                <View style={styles.orderHeader}>
-                  <Image 
-                    source={{ uri: order.storeImage }} 
-                    style={styles.storeImage}
-                  />
-                  <View style={styles.orderInfo}>
-                    <Text style={[styles.storeName, { color: colors.text }]}>
+                <View style={styles.cardTop}>
+                  <View style={[styles.avatar, { backgroundColor: colors.primary + '1A' }]}>
+                    <Text style={[styles.avatarText, { color: colors.primary }]}>{order.storeName[0]?.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={[styles.storeName, { color: colors.text }]} numberOfLines={1}>
                       {order.storeName}
                     </Text>
-                    <Text style={[styles.orderDate, { color: colors.textSecondary }]}>
-                      {order.date}
+                    <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      #{order.orderNumber} · {order.date}
                     </Text>
-                    <View style={styles.itemsPreview}>
-                      <Text style={[styles.itemsText, { color: colors.textSecondary }]}>
-                        {order.itemCount} item{order.itemCount !== 1 ? 's' : ''}
-                      </Text>
-                      <Text style={[styles.paymentMethod, { color: colors.textTertiary }]}>
-                        • {order.paymentMethod}
-                      </Text>
-                    </View>
-                    {order.deliverySlot && (
-                      <Text style={[styles.deliverySlot, { color: colors.textTertiary }]}>
-                        Delivery: {order.deliverySlot}
-                      </Text>
-                    )}
                   </View>
+                  <Badge label={info.label} tone={info.tone} />
                 </View>
-                
-                <View style={[styles.orderFooter, { borderTopColor: colors.divider }]}>
-                  <View style={styles.statusContainer}>
-                    <View style={[styles.statusBadge, { backgroundColor: order.statusColor + '20' }]}>
-                      <Text style={[styles.statusText, { color: order.statusColor }]}>
-                        {order.status}
-                      </Text>
+
+                <View style={[styles.cardBottom, { borderTopColor: colors.divider }]}>
+                  <Text style={[styles.total, { color: colors.text }]}>{formatPrice(order.total)}</Text>
+                  {active ? (
+                    <View style={styles.action}>
+                      <Text style={[styles.actionText, { color: colors.primary }]}>Track order</Text>
+                      <IconSymbol name="arrow.right" size={16} color={colors.primary} />
                     </View>
-                  </View>
-                  <View style={styles.amountContainer}>
-                    <Text style={[styles.totalAmount, { color: colors.text }]}>
-                      {order.totalAmount}
-                    </Text>
-                    <TouchableOpacity style={styles.reorderButton}>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      disabled={reorderingId === order.id}
+                      onPress={() => reorder(order)}
+                      style={[styles.reorder, { borderColor: colors.primary, opacity: reorderingId === order.id ? 0.6 : 1 }]}
+                    >
                       <Text style={[styles.reorderText, { color: colors.primary }]}>
-                        Reorder
+                        {reorderingId === order.id ? 'Adding…' : 'Reorder'}
                       </Text>
                     </TouchableOpacity>
-                  </View>
+                  )}
                 </View>
               </TouchableOpacity>
-            ))}
-          </>
+            );
+          })}
+
+        {!loading && !error && page < totalPages && (
+          <TouchableOpacity style={styles.loadMore} onPress={() => fetchOrders(page + 1)} activeOpacity={0.7}>
+            <Text style={[styles.loadMoreText, { color: colors.primary }]}>Load older orders</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -277,131 +278,50 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
+  title: { fontSize: 24, fontWeight: Typography.fontWeight.bold },
+  chips: { flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md },
+  chip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 18, borderWidth: 1 },
+  chipText: { fontSize: 13, fontWeight: Typography.fontWeight.semibold },
+  content: { paddingHorizontal: Spacing.lg, paddingBottom: 130 },
+  card: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  header: {
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 18, fontWeight: Typography.fontWeight.bold },
+  cardInfo: { flex: 1 },
+  storeName: { fontSize: 15, fontWeight: Typography.fontWeight.bold },
+  meta: { fontSize: 12, marginTop: 2 },
+  cardBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 12,
+    paddingTop: 12,
   },
-  headerTitle: {
-    ...TextStyles.h4,
-  },
-  orderCount: {
-    ...TextStyles.caption,
-    marginTop: Spacing.xs,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: Spacing.lg,
-  },
-  orderCard: {
-    borderRadius: Layout.card.borderRadius,
-    marginBottom: Spacing.lg,
-    overflow: 'hidden',
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    padding: Layout.card.padding,
-  },
-  storeImage: {
-    width: 60,
-    height: 60,
-    borderRadius: Layout.borderRadius.md,
-    marginRight: Spacing.md,
-  },
-  orderInfo: {
-    flex: 1,
-  },
-  storeName: {
-    ...TextStyles.h5,
-    marginBottom: Spacing.xs,
-  },
-  orderDate: {
-    ...TextStyles.bodySmall,
-    marginBottom: Spacing.sm,
-  },
-  itemsPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  itemsText: {
-    ...TextStyles.caption,
-    flex: 1,
-  },
-  paymentMethod: {
-    ...TextStyles.caption,
-    marginLeft: Spacing.sm,
-  },
-  deliverySlot: {
-    ...TextStyles.caption,
-    marginTop: Spacing.xs,
-  },
-  orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Layout.card.padding,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-  },
-  statusContainer: {
-    flex: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: Layout.borderRadius.sm,
-    alignSelf: 'flex-start',
-  },
-  statusText: {
-    ...TextStyles.caption,
-    fontWeight: Typography.fontWeight.semibold,
-  },
-  amountContainer: {
-    alignItems: 'flex-end',
-  },
-  totalAmount: {
-    ...TextStyles.price,
-    marginBottom: Spacing.xs,
-  },
-  reorderButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  reorderText: {
-    ...TextStyles.bodySmall,
-    fontWeight: Typography.fontWeight.semibold,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxxl,
-    paddingTop: 100,
-  },
-  emptyTitle: {
-    ...TextStyles.h4,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
-  },
-  emptySubtitle: {
-    ...TextStyles.body,
-    textAlign: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  shopButton: {
-    paddingHorizontal: Spacing.xxl,
-    paddingVertical: Spacing.md,
-    borderRadius: Layout.button.borderRadius,
-  },
-  shopButtonText: {
-    ...TextStyles.button,
-  },
+  total: { fontSize: 16, fontWeight: Typography.fontWeight.bold },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actionText: { fontSize: 14, fontWeight: Typography.fontWeight.semibold },
+  reorder: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5 },
+  reorderText: { fontSize: 13, fontWeight: Typography.fontWeight.bold },
+  loadMore: { alignItems: 'center', paddingVertical: 12 },
+  loadMoreText: { fontSize: 14, fontWeight: Typography.fontWeight.semibold },
+  empty: { alignItems: 'center', paddingVertical: 56, paddingHorizontal: 32, gap: 6 },
+  emptyEmoji: { fontSize: 48, marginBottom: 6 },
+  emptyTitle: { fontSize: 17, fontWeight: Typography.fontWeight.bold },
+  emptyText: { fontSize: 13, textAlign: 'center' },
+  button: { marginTop: 14, paddingVertical: 11, paddingHorizontal: 26, borderRadius: 14 },
+  buttonText: { fontSize: 14, fontWeight: Typography.fontWeight.semibold },
 });

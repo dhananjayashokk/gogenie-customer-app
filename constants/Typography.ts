@@ -6,9 +6,10 @@
 export const Typography = {
   // Font Families
   fontFamily: {
-    regular: 'System',
-    medium: 'System',
-    bold: 'System',
+    regular: 'Poppins_400Regular',
+    medium: 'Poppins_500Medium',
+    semibold: 'Poppins_600SemiBold',
+    bold: 'Poppins_700Bold',
     mono: 'SpaceMono',
   },
   
@@ -125,3 +126,22 @@ export const TextStyles = {
     textDecorationLine: 'line-through' as const,
   },
 };
+/**
+ * Poppins ships one file per weight, so the weight has to be baked into the family name
+ * (React Native can't pick a weight from a custom family). Used by components/AppText.
+ */
+export function fontFamilyForWeight(weight?: string | number): string {
+  switch (String(weight)) {
+    case '700':
+    case '800':
+    case '900':
+    case 'bold':
+      return Typography.fontFamily.bold;
+    case '600':
+      return Typography.fontFamily.semibold;
+    case '500':
+      return Typography.fontFamily.medium;
+    default:
+      return Typography.fontFamily.regular;
+  }
+}

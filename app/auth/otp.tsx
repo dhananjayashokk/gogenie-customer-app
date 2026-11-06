@@ -1,4 +1,6 @@
-import { StyleSheet, View, Text, Alert, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { useToast } from '@/contexts/ToastContext';
+import { Text, TextInput } from '@/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -13,6 +15,7 @@ import { useState, useEffect, useRef } from 'react';
 export default function OTPScreen() {
   const colorScheme = useAppColorScheme();
   const colors = Colors[colorScheme];
+  const { show: showToast } = useToast();
   const { state, verifyOTP, sendOTP, clearPhoneNumber, getSampleCustomers, loginWithSampleCustomer } = useAuth();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -70,24 +73,23 @@ export default function OTPScreen() {
   const handleVerifyOTP = async () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
-      Alert.alert('Error', 'Please enter complete 6-digit OTP');
+      showToast('Please enter complete 6-digit OTP', 'error');
       return;
     }
 
     const result = await verifyOTP(otpString);
     
     if (result.success) {
-      Alert.alert('Success', 'Login successful!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
-      ]);
+      showToast('Login successful!', 'success');
+      router.replace('/(tabs)');
     } else {
-      Alert.alert('Error', result.message);
+      showToast(result.message, 'error');
     }
   };
 
   const handleResendOTP = async () => {
     if (!state.phoneNumber) {
-      Alert.alert('Error', 'Phone number not found. Please go back and try again.');
+      showToast('Phone number not found. Please go back and try again.', 'error');
       return;
     }
 
@@ -97,9 +99,9 @@ export default function OTPScreen() {
       setTimeLeft(60);
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
-      Alert.alert('OTP Sent', 'A new verification code has been sent to your phone');
+      showToast('A new verification code has been sent to your phone', 'success');
     } else {
-      Alert.alert('Error', result.message);
+      showToast(result.message, 'error');
     }
   };
 
@@ -107,11 +109,10 @@ export default function OTPScreen() {
     const result = await loginWithSampleCustomer(customer);
     
     if (result.success) {
-      Alert.alert('Success', `Welcome back, ${customer.name}!`, [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
-      ]);
+      showToast(`Welcome back, ${customer.name}!`, 'success');
+      router.replace('/(tabs)');
     } else {
-      Alert.alert('Error', result.message);
+      showToast(result.message, 'error');
     }
   };
 

@@ -1,4 +1,5 @@
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
+import { Modal, View, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
+import { Text } from '@/components/AppText';
 import { Colors } from '@/constants/Colors';
 import { Layout, Spacing } from '@/constants/Layout';
 import { TextStyles } from '@/constants/Typography';

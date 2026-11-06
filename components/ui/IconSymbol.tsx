@@ -53,6 +53,10 @@ const MAPPING = {
   'bell': 'notifications',
   'bell.fill': 'notifications',
   'creditcard': 'credit-card',
+  'exclamationmark.triangle.fill': 'warning',
+  'arrow.right.square': 'logout',
+  'shield': 'security',
+  'person.circle': 'account-circle',
   'building.2': 'business',
   'tag': 'local-offer',
   'tag.fill': 'local-offer',
@@ -66,6 +70,8 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.up': 'keyboard-arrow-up',
+  'chevron.down': 'keyboard-arrow-down',
 } as IconMapping;
 
 /**

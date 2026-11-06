@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, Dimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Platform, Dimensions } from 'react-native';
+import { Text } from '@/components/AppText';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
@@ -7,6 +8,7 @@ import { Layout, Spacing } from '@/constants/Layout';
 import { Typography } from '@/constants/Typography';
 import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { useCart } from '@/contexts/CartContext';
+import { useTabBarHeight } from '@/contexts/TabBarHeightContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -16,6 +18,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const colors = Colors[colorScheme];
   const { state: cartState } = useCart();
   const insets = useSafeAreaInsets();
+  const { setHeight: reportTabBarHeight } = useTabBarHeight();
 
   // Animation values for each tab
   const animatedValues = useRef(
@@ -76,7 +79,9 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   };
 
   return (
-    <View style={[
+    <View
+      onLayout={(event) => reportTabBarHeight(event.nativeEvent.layout.height)}
+      style={[
       styles.container,
       {
         backgroundColor: colors.surface,

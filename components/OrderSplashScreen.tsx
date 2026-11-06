@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, Animated } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Animated } from 'react-native';
+import { Text } from '@/components/AppText';
 import { Colors } from '@/constants/Colors';
 import { Layout, Spacing } from '@/constants/Layout';
 import { Typography, TextStyles } from '@/constants/Typography';

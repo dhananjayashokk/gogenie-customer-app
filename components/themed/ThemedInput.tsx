@@ -1,13 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  TextInput, 
-  View, 
-  Text, 
-  TouchableOpacity,
-  TextInputProps,
-  ViewStyle 
-} from 'react-native';
+import { StyleSheet, View, TouchableOpacity, TextInputProps, ViewStyle } from 'react-native';
+import { TextInput, Text } from '@/components/AppText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { Colors } from '@/constants/Colors';

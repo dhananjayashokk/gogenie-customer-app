@@ -1,554 +1,305 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, Image, Alert, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
-import { Layout, Spacing } from '@/constants/Layout';
-import { Typography, TextStyles } from '@/constants/Typography';
-import { useAppColorScheme } from '@/contexts/ThemeContext';
-import { useCart } from '@/contexts/CartContext';
-import { ApiService } from '@/services/api';
-import { useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Text, TextInput } from '@/components/AppText';
 import OrderSplashScreen from '@/components/OrderSplashScreen';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ProductImage } from '@/components/ui/ProductImage';
+import { QuantityStepper } from '@/components/ui/QuantityStepper';
+import { Colors } from '@/constants/Colors';
+import { Spacing } from '@/constants/Layout';
+import { Typography } from '@/constants/Typography';
+import { useCart } from '@/contexts/CartContext';
+import { useTabBarHeight } from '@/contexts/TabBarHeightContext';
+import { useAppColorScheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
+import { ApiService } from '@/services/api';
+import { formatPrice } from '@/utils/product';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const FALLBACK_TAB_BAR_HEIGHT = 90;
+const NOTE_MAX_LENGTH = 200;
 
 export default function CartScreen() {
   const colorScheme = useAppColorScheme();
   const colors = Colors[colorScheme];
-  const { state: cartState, updateQuantity, removeItem, clearCart } = useCart();
+  const { show: showToast } = useToast();
+  const { state: cartState, updateQuantity, clearCart } = useCart();
+  const { height: measuredTabBarHeight } = useTabBarHeight();
+  const tabBarHeight = measuredTabBarHeight || FALLBACK_TAB_BAR_HEIGHT;
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [note, setNote] = useState('');
 
-  const deliveryFee = cartState.totalAmount > 500 ? 0 : 30; // Free delivery over ₹500
   const subtotal = cartState.totalAmount;
-  const savings = 0; // We don't have original price data in our cart context
+  // The server does not charge for delivery yet ("free delivery for now"), so neither does the bill.
+  const deliveryFee = 0;
   const total = subtotal + deliveryFee;
 
-  // Get store ID from first item in cart (assuming all items are from same store)
-  const storeId = cartState.items[0]?.storeId || '1';
+  const storeId = cartState.items[0]?.storeId;
+  const storeName = cartState.items[0]?.storeName;
 
   const handlePlaceOrder = async () => {
-    if (cartState.items.length === 0) {
-      Alert.alert('Error', 'Your cart is empty');
+    if (cartState.items.length === 0 || !storeId) {
+      showToast('Your cart is empty', 'error');
       return;
     }
 
     setIsPlacingOrder(true);
-
     try {
-      // Add minimum delay to show splash screen properly
       const startTime = Date.now();
-
-      // Prepare order data according to the API specification
       const orderData = {
         storeId: typeof storeId === 'string' ? parseInt(storeId) : storeId,
-        items: cartState.items.map(item => ({
-          storeProductId: item.id, // Using item.id as storeProductId
-          quantity: item.quantity
+        items: cartState.items.map((item) => ({
+          storeProductId: item.id as any,
+          quantity: item.quantity,
         })),
         deliverySlot: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now
-        specialInstructions: "Please call when arriving",
-        paymentMethodId: 1 // Default payment method
+        specialInstructions: note.trim() || undefined,
+        paymentMethodId: 1, // cash on delivery
       };
 
       const [response] = await Promise.all([
         ApiService.orders.placeDeliveryOrder(orderData),
-        // Ensure minimum splash screen time of 3.5 seconds
-        new Promise(resolve => {
-          const elapsed = Date.now() - startTime;
-          const remaining = Math.max(3500 - elapsed, 0);
-          setTimeout(resolve, remaining);
-        })
+        // keep the order animation up for a moment so it doesn't flash
+        new Promise((resolve) => setTimeout(resolve, Math.max(3500 - (Date.now() - startTime), 0))),
       ]);
 
-      console.log('Order placement response:', response);
-
-      // Success - clear cart and navigate to order tracking
       clearCart();
-      
-      // Navigate to order tracking page with the order ID
-      const orderId = response.orderId || response.id || response.orderNumber || response.order?.id;
-      
-      if (orderId) {
-        console.log('Navigating to order tracking with orderId:', orderId);
-        router.push(`/order/${orderId}`);
-      } else {
-        // Generate a fallback order ID based on timestamp
-        const fallbackOrderId = `ORD-${Date.now()}`;
-        console.warn('No order ID found in response, using fallback:', fallbackOrderId);
-        console.warn('Full response object:', JSON.stringify(response, null, 2));
-        
-        // Store cart data for the fallback order
-        const fallbackOrderData = {
-          orderId: fallbackOrderId,
-          items: cartState.items,
-          totalAmount: total,
-          subtotal: subtotal,
-          deliveryFee: deliveryFee,
-          timestamp: Date.now(),
-          paymentMethod: 'Cash on Delivery'
-        };
-        
-        AsyncStorage.setItem(`fallback_order_${fallbackOrderId}`, JSON.stringify(fallbackOrderData))
-          .then(() => {
-            console.log('Stored fallback order data:', fallbackOrderId);
-          })
-          .catch(err => {
-            console.error('Failed to store fallback order data:', err);
-          });
-        
-        router.push(`/order/${fallbackOrderId}`);
-      }
-      
-      // Show brief success message
-      Alert.alert(
-        'Order Placed!', 
-        'Your order has been placed successfully. You can track its progress now.',
-        [{ text: 'OK' }]
-      );
+      setNote('');
+
+      const orderId = response.orderId || response.id || response.order?.id;
+      showToast('Order placed! You can track its progress now.', 'success');
+      router.push(orderId ? `/order/${orderId}` : '/(tabs)/orders');
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert(
-        'Order Failed', 
-        error instanceof Error ? error.message : 'Failed to place order. Please try again.'
-      );
+      showToast(error instanceof Error ? error.message : 'Failed to place order. Please try again.', 'error');
     } finally {
       setIsPlacingOrder(false);
     }
   };
 
-  const QuantitySelector = ({ quantity, onIncrease, onDecrease }: any) => (
-    <View style={[styles.quantitySelector, { borderColor: colors.border }]}>
-      <TouchableOpacity 
-        style={styles.quantityButton}
-        onPress={onDecrease}
-        activeOpacity={0.7}
-      >
-        <IconSymbol name="minus" size={16} color={colors.primary} />
-      </TouchableOpacity>
-      <Text style={[styles.quantityText, { color: colors.text }]}>{quantity}</Text>
-      <TouchableOpacity 
-        style={styles.quantityButton}
-        onPress={onIncrease}
-        activeOpacity={0.7}
-      >
-        <IconSymbol name="plus" size={16} color={colors.primary} />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const getEmptyCart = () => (
-    <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
-      <IconSymbol name="cart" size={64} color={colors.textTertiary} />
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>Your Cart is Empty</Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Add items from stores to get started
-      </Text>
-      <TouchableOpacity
-        style={[styles.shopButton, { backgroundColor: colors.primary }]}
-        activeOpacity={0.8}
-        onPress={() => router.replace('/(tabs)')}
-      >
-        <Text style={[styles.shopButtonText, { color: colors.textInverse }]}>
-          Browse Stores
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+  if (cartState.items.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <OrderSplashScreen visible={isPlacingOrder} />
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>My Cart</Text>
+        </View>
+        <View style={styles.empty}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.primary + '14' }]}>
+            <Text style={{ fontSize: 48 }}>🛒</Text>
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Your cart is empty</Text>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+            Add items from a store to get started.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            activeOpacity={0.85}
+            onPress={() => router.replace('/(tabs)')}
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.textInverse }]}>Browse stores</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Order Splash Screen */}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <OrderSplashScreen visible={isPlacingOrder} />
 
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.divider }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>My Cart</Text>
-        <Text style={[styles.itemCount, { color: colors.textSecondary }]}>
-          {cartState.totalItems} item{cartState.totalItems !== 1 ? 's' : ''}
-        </Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>My Cart</Text>
+          <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
+            {cartState.totalItems} item{cartState.totalItems !== 1 ? 's' : ''}
+            {storeName ? ` · ${storeName}` : ''}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={clearCart} hitSlop={8} activeOpacity={0.7}>
+          <Text style={[styles.clear, { color: colors.error }]}>Clear all</Text>
+        </TouchableOpacity>
       </View>
 
-      {cartState.items.length === 0 ? getEmptyCart() : (
-        <View style={styles.contentWrapper}>
-          {/* Cart Items */}
-          <ScrollView
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            {/* Store Info */}
-            <View style={[styles.storeInfo, { backgroundColor: colors.surface }]}>
-              <IconSymbol name="storefront" size={20} color={colors.primary} />
-              <Text style={[styles.storeName, { color: colors.text }]}>Fresh Mart</Text>
-              <Text style={[styles.deliveryTime, { color: colors.textSecondary }]}>
-                Delivery in 25 mins
-              </Text>
-            </View>
-
-            {/* Items */}
-            {cartState.items.map((item) => (
-              <View 
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: tabBarHeight + 110 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Items */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            {cartState.items.map((item, index) => (
+              <View
                 key={item.id}
-                style={[styles.cartItem, { 
-                  backgroundColor: colors.surface,
-                  borderBottomColor: colors.divider 
-                }]}
+                style={[
+                  styles.itemRow,
+                  index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider },
+                ]}
               >
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-                <View style={styles.itemInfo}>
-                  <Text style={[styles.itemName, { color: colors.text }]}>
+                <ProductImage uri={item.image || null} categoryName={item.category} style={styles.itemImage} emojiSize={28} />
+                <View style={styles.itemBody}>
+                  <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={2}>
                     {item.name}
                   </Text>
                   <Text style={[styles.itemUnit, { color: colors.textSecondary }]}>
-                    {item.unit}
+                    {item.unit} · {formatPrice(item.price)}
                   </Text>
-                  <View style={styles.priceRow}>
-                    <Text style={[styles.itemPrice, { color: colors.text }]}>
-                      ₹{item.price}
-                    </Text>
-                    {item.originalPrice && (
-                      <Text style={[styles.originalPrice, { color: colors.textTertiary }]}>
-                        ₹{item.originalPrice}
-                      </Text>
-                    )}
-                    {item.discount && (
-                      <View style={[styles.discountBadge, { backgroundColor: colors.success + '20' }]}>
-                        <Text style={[styles.discountText, { color: colors.success }]}>
-                          {item.discount}% OFF
-                        </Text>
-                      </View>
-                    )}
-                  </View>
                 </View>
-                <View style={styles.quantityContainer}>
-                  <QuantitySelector 
+                <View style={styles.itemRight}>
+                  <QuantityStepper
                     quantity={item.quantity}
-                    onIncrease={() => updateQuantity(item.id, item.quantity + 1)}
-                    onDecrease={() => updateQuantity(item.id, item.quantity - 1)}
+                    onAdd={() => updateQuantity(item.id, 1)}
+                    onChange={(quantity) => updateQuantity(item.id, quantity)}
                   />
-                  <Text style={[styles.itemTotal, { color: colors.text }]}>
-                    ₹{(item.price * item.quantity).toFixed(0)}
-                  </Text>
+                  <Text style={[styles.itemTotal, { color: colors.text }]}>{formatPrice(item.price * item.quantity)}</Text>
                 </View>
               </View>
             ))}
-
-            {/* Bill Details */}
-            <View style={[styles.billDetails, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.billTitle, { color: colors.text }]}>Bill Details</Text>
-              
-              <View style={styles.billRow}>
-                <Text style={[styles.billLabel, { color: colors.textSecondary }]}>
-                  Item Total
-                </Text>
-                <Text style={[styles.billValue, { color: colors.text }]}>
-                  ₹{subtotal.toFixed(2)}
-                </Text>
-              </View>
-
-              <View style={styles.billRow}>
-                <Text style={[styles.billLabel, { color: colors.textSecondary }]}>
-                  Delivery Fee
-                </Text>
-                <Text style={[styles.billValue, { color: colors.text }]}>
-                  ₹{deliveryFee.toFixed(2)}
-                </Text>
-              </View>
-
-              {savings > 0 && (
-                <View style={styles.billRow}>
-                  <Text style={[styles.billLabel, { color: colors.success }]}>
-                    Total Savings
-                  </Text>
-                  <Text style={[styles.billValue, { color: colors.success }]}>
-                    -₹{savings.toFixed(2)}
-                  </Text>
-                </View>
-              )}
-
-              <View style={[styles.totalRow, { borderTopColor: colors.divider }]}>
-                <Text style={[styles.totalLabel, { color: colors.text }]}>
-                  To Pay
-                </Text>
-                <Text style={[styles.totalValue, { color: colors.text }]}>
-                  ₹{total.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Add more items suggestion */}
-            <TouchableOpacity
-              style={[styles.addMoreButton, { borderColor: colors.primary }]}
-              activeOpacity={0.7}
-              onPress={() => router.push(`/store/${storeId}`)}
-            >
-              <IconSymbol name="plus.circle" size={20} color={colors.primary} />
-              <Text style={[styles.addMoreText, { color: colors.primary }]}>
-                Add more items
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-
-          {/* Checkout Button */}
-          <View style={[styles.checkoutContainer, {
-            backgroundColor: colors.background,
-            borderTopColor: colors.divider,
-            ...Layout.shadow.lg
-          }]}>
-            <View style={styles.checkoutInfo}>
-              <Text style={[styles.checkoutTotal, { color: colors.text }]}>
-                ₹{total.toFixed(2)}
-              </Text>
-              <Text style={[styles.checkoutItems, { color: colors.textSecondary }]}>
-                {cartState.totalItems} item{cartState.totalItems !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.checkoutButton, { 
-                backgroundColor: isPlacingOrder ? colors.textSecondary : colors.primary,
-                opacity: isPlacingOrder ? 0.7 : 1
-              }]}
-              activeOpacity={0.8}
-              onPress={handlePlaceOrder}
-              disabled={isPlacingOrder}
-            >
-              <Text style={[styles.checkoutButtonText, { color: colors.textInverse }]}>
-                {isPlacingOrder ? 'Placing Order...' : 'Place Order'}
-              </Text>
-              {!isPlacingOrder && (
-                <IconSymbol name="arrow.right" size={20} color={colors.textInverse} />
-              )}
-            </TouchableOpacity>
           </View>
-        </View>
-      )}
-    </View>
+
+          <TouchableOpacity
+            style={styles.addMore}
+            activeOpacity={0.7}
+            onPress={() => router.push(`/store/${storeId}`)}
+          >
+            <IconSymbol name="plus" size={16} color={colors.primary} />
+            <Text style={[styles.addMoreText, { color: colors.primary }]}>Add more items</Text>
+          </TouchableOpacity>
+
+          {/* Delivery notes (optional) */}
+          <View style={[styles.card, styles.cardPadded, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Delivery instructions</Text>
+            <TextInput
+              value={note}
+              onChangeText={(value) => setNote(value.slice(0, NOTE_MAX_LENGTH))}
+              placeholder="e.g. Please call when you arrive (optional)"
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              maxLength={NOTE_MAX_LENGTH}
+              style={[styles.noteInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+            />
+            <Text style={[styles.noteCount, { color: colors.textTertiary }]}>
+              {note.length}/{NOTE_MAX_LENGTH}
+            </Text>
+          </View>
+
+          {/* Bill */}
+          <View style={[styles.card, styles.cardPadded, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Bill details</Text>
+            <View style={styles.billRow}>
+              <Text style={[styles.billLabel, { color: colors.textSecondary }]}>Item total</Text>
+              <Text style={[styles.billValue, { color: colors.text }]}>{formatPrice(subtotal)}</Text>
+            </View>
+            <View style={styles.billRow}>
+              <Text style={[styles.billLabel, { color: colors.textSecondary }]}>Delivery fee</Text>
+              <Text style={[styles.billValue, { color: colors.success }]}>Free</Text>
+            </View>
+            <View style={[styles.totalRow, { borderTopColor: colors.divider }]}>
+              <Text style={[styles.totalLabel, { color: colors.text }]}>To pay</Text>
+              <Text style={[styles.totalValue, { color: colors.text }]}>{formatPrice(total)}</Text>
+            </View>
+            <View style={[styles.payNote, { backgroundColor: colors.primary + '10' }]}>
+              <IconSymbol name="creditcard" size={16} color={colors.primary} />
+              <Text style={[styles.payNoteText, { color: colors.textSecondary }]}>Pay with cash on delivery</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Place order bar, pinned above the tab bar */}
+      <View style={[styles.checkout, { bottom: tabBarHeight + Spacing.sm }]} pointerEvents="box-none">
+        <TouchableOpacity
+          activeOpacity={0.9}
+          disabled={isPlacingOrder}
+          onPress={handlePlaceOrder}
+          style={[styles.checkoutButton, { backgroundColor: colors.primary, opacity: isPlacingOrder ? 0.7 : 1 }]}
+        >
+          <View>
+            <Text style={[styles.checkoutCount, { color: colors.textInverse }]}>
+              {cartState.totalItems} item{cartState.totalItems !== 1 ? 's' : ''}
+            </Text>
+            <Text style={[styles.checkoutTotal, { color: colors.textInverse }]}>{formatPrice(total)}</Text>
+          </View>
+          <View style={styles.checkoutAction}>
+            <Text style={[styles.checkoutText, { color: colors.textInverse }]}>
+              {isPlacingOrder ? 'Placing order…' : 'Place order'}
+            </Text>
+            {!isPlacingOrder && <IconSymbol name="arrow.right" size={18} color={colors.textInverse} />}
+          </View>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    height: Platform.OS === 'web' ? '100vh' : undefined,
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
   },
-  headerTitle: {
-    ...TextStyles.h4,
-  },
-  itemCount: {
-    ...TextStyles.body,
-  },
-  contentWrapper: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: Platform.OS === 'web' ? 200 : 100, // Extra padding for button + tab bar
-  },
-  storeInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.sm,
-    borderRadius: Layout.borderRadius.md,
-  },
-  storeName: {
-    ...TextStyles.bodyLarge,
-    fontWeight: Typography.fontWeight.semibold,
-    marginLeft: Spacing.sm,
-    flex: 1,
-  },
-  deliveryTime: {
-    ...TextStyles.bodySmall,
-  },
-  cartItem: {
-    flexDirection: 'row',
-    padding: Spacing.lg,
-    borderBottomWidth: 1,
-  },
-  itemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: Layout.borderRadius.md,
-    marginRight: Spacing.md,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    ...TextStyles.body,
-    fontWeight: Typography.fontWeight.medium,
-    marginBottom: Spacing.xxs,
-  },
-  itemUnit: {
-    ...TextStyles.caption,
-    marginBottom: Spacing.xs,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  itemPrice: {
-    ...TextStyles.priceSmall,
-    marginRight: Spacing.sm,
-  },
-  originalPrice: {
-    ...TextStyles.caption,
-    textDecorationLine: 'line-through',
-    marginRight: Spacing.sm,
-  },
-  discountBadge: {
-    paddingHorizontal: Spacing.xs,
-    paddingVertical: 2,
-    borderRadius: Layout.borderRadius.xs,
-  },
-  discountText: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: Typography.fontWeight.semibold,
-  },
-  quantityContainer: {
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  quantitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerTitle: { fontSize: 24, fontWeight: Typography.fontWeight.bold },
+  headerSub: { fontSize: 13, marginTop: 2 },
+  clear: { fontSize: 13, fontWeight: Typography.fontWeight.semibold },
+  card: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, marginBottom: 12, overflow: 'hidden' },
+  cardPadded: { padding: 16 },
+  cardTitle: { fontSize: 15, fontWeight: Typography.fontWeight.bold, marginBottom: 12 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  itemImage: { width: 60, height: 60, borderRadius: 12 },
+  itemBody: { flex: 1 },
+  itemName: { fontSize: 14, fontWeight: Typography.fontWeight.semibold, lineHeight: 19 },
+  itemUnit: { fontSize: 12, marginTop: 2 },
+  itemRight: { alignItems: 'flex-end', gap: 6 },
+  itemTotal: { fontSize: 14, fontWeight: Typography.fontWeight.bold },
+  addMore: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, marginBottom: 12 },
+  addMoreText: { fontSize: 14, fontWeight: Typography.fontWeight.semibold },
+  noteInput: {
+    minHeight: 64,
     borderWidth: 1,
-    borderRadius: Layout.borderRadius.sm,
-    paddingHorizontal: Spacing.xs,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlignVertical: 'top',
   },
-  quantityButton: {
-    padding: Spacing.xs,
-  },
-  quantityText: {
-    ...TextStyles.body,
-    fontWeight: Typography.fontWeight.semibold,
-    marginHorizontal: Spacing.md,
-  },
-  itemTotal: {
-    ...TextStyles.priceSmall,
-    marginTop: Spacing.sm,
-  },
-  billDetails: {
-    margin: Spacing.lg,
-    padding: Spacing.lg,
-    borderRadius: Layout.borderRadius.lg,
-  },
-  billTitle: {
-    ...TextStyles.h5,
-    marginBottom: Spacing.md,
-  },
-  billRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
-  },
-  billLabel: {
-    ...TextStyles.body,
-  },
-  billValue: {
-    ...TextStyles.body,
-    fontWeight: Typography.fontWeight.medium,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-  },
-  totalLabel: {
-    ...TextStyles.bodyLarge,
-    fontWeight: Typography.fontWeight.semibold,
-  },
-  totalValue: {
-    ...TextStyles.price,
-  },
-  addMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: Spacing.lg,
-    marginVertical: Spacing.lg,
-    padding: Spacing.md,
-    borderWidth: 1.5,
-    borderRadius: Layout.borderRadius.md,
-    borderStyle: 'dashed',
-  },
-  addMoreText: {
-    ...TextStyles.body,
-    fontWeight: Typography.fontWeight.medium,
-    marginLeft: Spacing.sm,
-  },
-  checkoutContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.lg,
-    paddingBottom: Platform.OS === 'web' ? Spacing.lg : Spacing.xl,
-    borderTopWidth: 1,
-    minHeight: 80,
-    ...(Platform.OS === 'web' ? {
-      position: 'fixed' as any,
-      bottom: 80, // Above tab bar (increased from 60)
-      left: 0,
-      right: 0,
-      zIndex: 100,
-    } : {}),
-  },
-  checkoutInfo: {
-    flex: 1,
-  },
-  checkoutTotal: {
-    ...TextStyles.price,
-  },
-  checkoutItems: {
-    ...TextStyles.caption,
-  },
+  noteCount: { alignSelf: 'flex-end', fontSize: 11, marginTop: 6 },
+  billRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+  billLabel: { fontSize: 14 },
+  billValue: { fontSize: 14, fontWeight: Typography.fontWeight.semibold },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 8, paddingTop: 12 },
+  totalLabel: { fontSize: 16, fontWeight: Typography.fontWeight.bold },
+  totalValue: { fontSize: 16, fontWeight: Typography.fontWeight.bold },
+  payNote: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, marginTop: 14 },
+  payNoteText: { fontSize: 12 },
+  checkout: { position: 'absolute', left: 0, right: 0, paddingHorizontal: Spacing.lg },
   checkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: Layout.button.borderRadius,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  checkoutButtonText: {
-    ...TextStyles.button,
-    marginRight: Spacing.sm,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxxl,
-  },
-  emptyTitle: {
-    ...TextStyles.h4,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
-  },
-  emptySubtitle: {
-    ...TextStyles.body,
-    textAlign: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  shopButton: {
-    paddingHorizontal: Spacing.xxl,
-    paddingVertical: Spacing.md,
-    borderRadius: Layout.button.borderRadius,
-  },
-  shopButtonText: {
-    ...TextStyles.button,
-  },
+  checkoutCount: { fontSize: 11, opacity: 0.85, fontWeight: Typography.fontWeight.medium },
+  checkoutTotal: { fontSize: 17, fontWeight: Typography.fontWeight.bold },
+  checkoutAction: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkoutText: { fontSize: 16, fontWeight: Typography.fontWeight.semibold },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 8 },
+  emptyIcon: { width: 110, height: 110, borderRadius: 55, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: Typography.fontWeight.bold },
+  emptyText: { fontSize: 14, textAlign: 'center' },
+  primaryButton: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 14 },
+  primaryButtonText: { fontSize: 15, fontWeight: Typography.fontWeight.semibold },
 });
