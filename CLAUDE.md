@@ -98,9 +98,11 @@ eas build -p android --profile preview   # the one APK people install by hand
 
 Every release after that (JS / UI / logic changes):
 ```bash
-eas update --channel preview --message "what changed"
+eas update --channel preview --environment preview --message "what changed"
 ```
 Installed apps check on launch and when reopened (`useOtaUpdate`), download the update and offer "Restart".
+
+**Always pass `--environment preview` (or `production`).** `eas update` bundles on your machine; without it the app is built with your local `.env` (e.g. `http://localhost:3000`) and every request fails on the phone. API/Supabase addresses live in the EAS environment variables (`eas env:list --environment preview`), which builds and updates both read.
 
 Native changes (new native library, permissions, icon/splash, Expo SDK upgrade): bump `version` in `app.json` (this changes the runtime version), then `eas build` again and reinstall. Updates published for the old version will not reach the new build and vice versa.
 

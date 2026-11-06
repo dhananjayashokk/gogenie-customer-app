@@ -1,510 +1,226 @@
-import { Colors } from "@/constants/Colors";
+import { Text, TextInput } from '@/components/AppText';
+import { Colors } from '@/constants/Colors';
+import { Spacing } from '@/constants/Layout';
+import { Typography } from '@/constants/Typography';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAppColorScheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
-import { Spacing } from "@/constants/Layout";
-import { TextStyles } from "@/constants/Typography";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAppColorScheme } from "@/contexts/ThemeContext";
-import { ApiService } from "@/services/api";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
-import { Text } from "@/components/AppText";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ApiService } from '@/services/api';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Customer {
   id: number;
   name: string;
   phone: string;
   email?: string;
-  customerType: "regular" | "premium" | "vip";
+  customerType: 'regular' | 'premium' | 'vip';
   loyaltyPoints: number;
 }
 
+const TYPE_ICON: Record<string, string> = { vip: '👑', premium: '⭐', regular: '👤' };
+
 export default function LoginScreen() {
-  const colorScheme = useAppColorScheme();
-  const colors = Colors[colorScheme];
+  const colors = Colors[useAppColorScheme()];
   const { show: showToast } = useToast();
   const { authenticateWithMobile, state } = useAuth();
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [showNameField, setShowNameField] = useState(false);
-  const [demoCustomers, setDemoCustomers] = useState<Customer[]>([]);
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
-  const [showDemoSection, setShowDemoSection] = useState(true);
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [quickCustomers, setQuickCustomers] = useState<Customer[]>([]);
   const isLoading = state.isLoading;
 
-  // Fetch actual customers from database
+  const isPhoneValid = /^\d{10}$/.test(phone);
+  const canSubmit = isPhoneValid && (!isNewCustomer || name.trim().length > 0) && !isLoading;
+
+  // Team quick access: customers that already exist in the database
   useEffect(() => {
-    fetchDemoCustomers();
+    ApiService.customer
+      .getDemoCustomers()
+      .then((response: any) => setQuickCustomers(response.customers || []))
+      .catch(() => setQuickCustomers([]));
   }, []);
 
-  const fetchDemoCustomers = async () => {
-    setLoadingCustomers(true);
-    try {
-      const response = await ApiService.customer.getDemoCustomers();
-      setDemoCustomers(response.customers || []);
-    } catch (error) {
-      console.error("Error fetching demo customers:", error);
-      // Fallback to empty array if fetch fails
-      setDemoCustomers([]);
-    } finally {
-      setLoadingCustomers(false);
-    }
-  };
+  const submit = async () => {
+    if (!canSubmit) return;
+    // The backend asks for a name only when the number is new, so try without one first
+    const result = await authenticateWithMobile(phone, isNewCustomer ? name.trim() : undefined);
 
-  const handleDemoLogin = async (customer: Customer) => {
-    try {
-      // Use the new mobile auth with the demo customer's phone number and name
-      const result = await authenticateWithMobile(
-        customer.phone,
-        customer.name
-      );
-
-      if (result.success) {
-        showToast(`Welcome, ${customer.name}!`, 'success');
-        router.replace("/(tabs)");
-      } else {
-        // Fallback to old demo login method if API fails
-        await AsyncStorage.setItem(
-          "user",
-          JSON.stringify({
-            id: customer.id.toString(),
-            name: customer.name,
-            phone: customer.phone,
-            email: customer.email || "",
-            customerType: customer.customerType,
-            loyaltyPoints: customer.loyaltyPoints,
-            isDemo: true,
-          })
-        );
-
-        await AsyncStorage.setItem("accessToken", `demo_token_${customer.id}`);
-        router.replace("/(tabs)");
-      }
-    } catch (error) {
-      console.error("Error during demo login:", error);
-      showToast("Failed to login with demo customer", 'error');
-    }
-  };
-
-  const getCustomerTypeColor = (type: string) => {
-    switch (type) {
-      case "vip":
-        return "#FFD700";
-      case "premium":
-        return "#E6E6FA";
-      default:
-        return colors.textSecondary;
-    }
-  };
-
-  const getCustomerTypeIcon = (type: string) => {
-    switch (type) {
-      case "vip":
-        return "👑";
-      case "premium":
-        return "⭐";
-      default:
-        return "👤";
-    }
-  };
-
-  const handleMobileAuth = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      showToast("Please enter a valid phone number", 'error');
-      return;
-    }
-
-    // First try without name to see if customer exists
-    if (!showNameField) {
-      const result = await authenticateWithMobile(phoneNumber);
-
-      if (result.success) {
-        showToast(result.message, 'success');
-        router.replace("/(tabs)");
-      } else if (
-        result.message?.includes("new customer") ||
-        result.isNewCustomer
-      ) {
-        // Customer doesn't exist, show name field
-        setShowNameField(true);
-        showToast("Please provide your name to create an account", 'info');
-      } else {
-        showToast(result.message, 'error');
-      }
+    if (result.success) {
+      showToast(result.message, 'success');
+      router.replace('/(tabs)');
+    } else if (!isNewCustomer && (result.message?.includes('new customer') || result.isNewCustomer)) {
+      setIsNewCustomer(true);
+      showToast('Welcome! Tell us your name to create your account', 'info');
     } else {
-      // Try with name for new customer
-      if (!customerName.trim()) {
-        showToast("Please enter your name", 'error');
-        return;
-      }
-
-      const result = await authenticateWithMobile(
-        phoneNumber,
-        customerName.trim()
-      );
-
-      if (result.success) {
-        showToast(result.message, 'success');
-        router.replace("/(tabs)");
-      } else {
-        showToast(result.message, 'error');
-      }
+      showToast(result.message, 'error');
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    showToast(`${provider} login integration would be implemented here`, 'info');
+  const quickLogin = async (customer: Customer) => {
+    const result = await authenticateWithMobile(customer.phone, customer.name);
+    if (result.success) {
+      showToast(`Welcome, ${customer.name}!`, 'success');
+      router.replace('/(tabs)');
+    } else {
+      showToast(result.message || 'Could not log in as this customer', 'error');
+    }
   };
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.logo, { color: colors.primary }]}>GoGenie</Text>
-          <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-            Your Genie for Everyday Needs
-          </Text>
-        </View>
-
-        {/* Welcome Section */}
-        <View style={styles.welcomeSection}>
-          <Text style={[styles.welcomeTitle, { color: colors.text }]}>
-            Your Genie Awaits!
-          </Text>
-          {/* <Text
-            style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}
-          >
-            Enter your phone number and let the magic begin
-          </Text> */}
-        </View>
-
-        {/* Login Form */}
-        {/* <ThemedCard style={styles.loginCard}>
-          <ThemedInput
-            label="Phone Number"
-            placeholder="Enter your 10-digit phone number"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            keyboardType="phone-pad"
-            maxLength={10}
-            leftIcon="phone"
-          />
-
-          {showNameField && (
-            <ThemedInput
-              label="Full Name"
-              placeholder="Enter your full name"
-              value={customerName}
-              onChangeText={setCustomerName}
-              leftIcon="person"
-              style={{ marginTop: Spacing.md }}
-            />
-          )}
-
-          <ThemedButton
-            title={
-              isLoading
-                ? "Processing..."
-                : showNameField
-                ? "Create Account & Login"
-                : "Login"
-            }
-            onPress={handleMobileAuth}
-            variant="primary"
-            size="lg"
-            fullWidth
-            loading={isLoading}
-            style={styles.otpButton}
-          />
-
-          {showNameField && (
-            <ThemedButton
-              title="Back"
-              onPress={() => {
-                setShowNameField(false);
-                setCustomerName("");
-              }}
-              variant="ghost"
-              size="sm"
-              style={{ marginTop: Spacing.sm }}
-            />
-          )}
-
-          <Text style={[styles.otpInfo, { color: colors.textTertiary }]}>
-            {showNameField
-              ? "We'll create your account and log you in instantly"
-              : "We'll log you in instantly or ask for your name if you're new"}
-          </Text>
-        </ThemedCard> */}
-
-        {/* Demo Customers Section */}
-        <View
-          style={{
-            padding: 16,
-            backgroundColor: "#f0f0f0",
-            margin: 16,
-            borderRadius: 8,
-          }}
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* 'padding' on Android as well: with edge-to-edge the window no longer resizes for the keyboard */}
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: "#000",
-              marginBottom: 12,
-            }}
-          >
-            🎭 Demo Login - Actual Customers from Database
-          </Text>
-          <Text style={{ color: "#666", marginBottom: 16 }}>
-            Click to login as any customer:
-          </Text>
+          <View style={styles.brand}>
+            <View style={[styles.logo, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.logoText, { color: colors.textInverse }]}>G</Text>
+            </View>
+            <Text style={[styles.brandName, { color: colors.text }]}>GoGenie</Text>
+            <Text style={[styles.tagline, { color: colors.textSecondary }]}>Your Genie for Everyday Needs</Text>
+          </View>
 
-          {loadingCustomers ? (
-            <View style={{ padding: 20, alignItems: "center" }}>
-              <Text style={{ color: "#666" }}>Loading customers...</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              {isNewCustomer ? 'Create your account' : 'Log in or sign up'}
+            </Text>
+
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Mobile number *</Text>
+            <View style={[styles.phoneRow, { borderColor: phone && !isPhoneValid ? colors.error : colors.border, backgroundColor: colors.background }]}>
+              <Text style={[styles.prefix, { color: colors.text, borderRightColor: colors.border }]}>+91</Text>
+              <TextInput
+                value={phone}
+                onChangeText={(value) => setPhone(value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit mobile number"
+                placeholderTextColor={colors.textTertiary}
+                keyboardType="number-pad"
+                maxLength={10}
+                editable={!isNewCustomer && !isLoading}
+                style={[styles.phoneInput, { color: colors.text }]}
+              />
             </View>
-          ) : demoCustomers.length === 0 ? (
-            <View style={{ padding: 20, alignItems: "center" }}>
-              <Text style={{ color: "#666" }}>No customers available</Text>
-            </View>
-          ) : (
-            demoCustomers.map((customer) => (
-              <TouchableOpacity
-                key={customer.id}
-                style={{
-                  backgroundColor: "#fff",
-                  padding: 12,
-                  marginBottom: 8,
-                  borderRadius: 6,
-                  borderWidth: 1,
-                  borderColor: "#ddd",
-                }}
-                onPress={() => handleDemoLogin(customer)}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: "600",
-                      color: "#000",
-                      flex: 1,
-                    }}
-                  >
-                    {customer.name}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "700",
-                      color: getCustomerTypeColor(customer.customerType),
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      backgroundColor: "#f5f5f5",
-                      borderRadius: 4,
-                    }}
-                  >
-                    {getCustomerTypeIcon(customer.customerType)}{" "}
-                    {customer.customerType.toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 14, color: "#666" }}>
-                  {customer.phone.replace("+91", "+91 ")} •{" "}
-                  {customer.loyaltyPoints} points
+            {phone.length > 0 && !isPhoneValid && (
+              <Text style={[styles.error, { color: colors.error }]}>Mobile number must be exactly 10 digits</Text>
+            )}
+
+            {isNewCustomer && (
+              <>
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: Spacing.md }]}>Full name *</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  placeholderTextColor={colors.textTertiary}
+                  autoFocus
+                  maxLength={60}
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                />
+              </>
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!canSubmit}
+              onPress={submit}
+              style={[styles.button, { backgroundColor: colors.primary, opacity: canSubmit ? 1 : 0.5 }]}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <Text style={[styles.buttonText, { color: colors.textInverse }]}>
+                  {isNewCustomer ? 'Create account & continue' : 'Continue'}
                 </Text>
-                {customer.email && (
-                  <Text style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
-                    {customer.email}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+              )}
+            </TouchableOpacity>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-            By continuing, you agree to our{" "}
-            <Text style={{ color: colors.primary }}>Terms of Service</Text> and{" "}
-            <Text style={{ color: colors.primary }}>Privacy Policy</Text>
-          </Text>
-        </View>
-      </ScrollView>
+            {isNewCustomer && (
+              <TouchableOpacity
+                onPress={() => {
+                  setIsNewCustomer(false);
+                  setName('');
+                }}
+                style={styles.back}
+              >
+                <Text style={[styles.backText, { color: colors.textSecondary }]}>Use a different number</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {quickCustomers.length > 0 && !isNewCustomer && (
+            <View style={styles.quick}>
+              <View style={styles.quickDivider}>
+                <View style={[styles.line, { backgroundColor: colors.divider }]} />
+                <Text style={[styles.quickLabel, { color: colors.textTertiary }]}>QUICK ACCESS</Text>
+                <View style={[styles.line, { backgroundColor: colors.divider }]} />
+              </View>
+              {quickCustomers.map((customer) => (
+                <TouchableOpacity
+                  key={customer.id}
+                  activeOpacity={0.8}
+                  disabled={isLoading}
+                  onPress={() => quickLogin(customer)}
+                  style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}
+                >
+                  <View style={[styles.avatar, { backgroundColor: colors.primary + '1A' }]}>
+                    <Text style={[styles.avatarText, { color: colors.primary }]}>{customer.name[0]?.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={[styles.quickName, { color: colors.text }]} numberOfLines={1}>
+                      {TYPE_ICON[customer.customerType] || '👤'} {customer.name}
+                    </Text>
+                    <Text style={[styles.quickMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {customer.phone.replace('+91', '+91 ')} · {customer.loyaltyPoints} points
+                    </Text>
+                  </View>
+                  <View style={[styles.go, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.goText, { color: colors.textInverse }]}>Login</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xxl,
-    paddingBottom: Spacing.xxxl,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: Spacing.xxxl * 2,
-  },
-  logo: {
-    ...TextStyles.h1,
-    fontWeight: "700",
-    marginBottom: Spacing.sm,
-  },
-  tagline: {
-    ...TextStyles.body,
-    textAlign: "center",
-  },
-  welcomeSection: {
-    alignItems: "center",
-    marginBottom: Spacing.xxxl,
-  },
-  welcomeTitle: {
-    ...TextStyles.h3,
-    marginBottom: Spacing.sm,
-  },
-  welcomeSubtitle: {
-    ...TextStyles.body,
-    textAlign: "center",
-    paddingHorizontal: Spacing.lg,
-  },
-  loginCard: {
-    marginBottom: Spacing.xl,
-  },
-  otpButton: {
-    marginTop: Spacing.md,
-  },
-  otpInfo: {
-    ...TextStyles.caption,
-    textAlign: "center",
-    marginTop: Spacing.md,
-  },
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: Spacing.xl,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    ...TextStyles.bodySmall,
-    paddingHorizontal: Spacing.lg,
-  },
-  socialContainer: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
-  },
-  socialButton: {
-    borderWidth: 1.5,
-  },
-  guestButton: {
-    alignSelf: "center",
-    marginBottom: Spacing.xl,
-  },
-  footer: {
-    flex: 1,
-    justifyContent: "flex-end",
-    paddingTop: Spacing.xxxl,
-  },
-  footerText: {
-    ...TextStyles.caption,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-
-  // Demo Customers Styles
-  demoSection: {
-    marginBottom: Spacing.xl,
-  },
-  demoHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-  },
-  demoTitle: {
-    ...TextStyles.h4,
-    fontWeight: "600",
-  },
-  demoToggle: {
-    ...TextStyles.h4,
-    fontWeight: "bold",
-  },
-  demoContent: {
-    paddingTop: Spacing.md,
-  },
-  demoSubtitle: {
-    ...TextStyles.bodySmall,
-    marginBottom: Spacing.lg,
-    textAlign: "center",
-  },
-  demoLoadingContainer: {
-    gap: Spacing.sm,
-  },
-  demoSkeleton: {
-    borderRadius: 12,
-  },
-  demoCustomersContainer: {
-    gap: Spacing.sm,
-  },
-  demoCustomerCard: {
-    borderRadius: 12,
-    padding: Spacing.md,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  demoCustomerInfo: {
-    flex: 1,
-  },
-  demoCustomerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
-  },
-  demoCustomerName: {
-    ...TextStyles.bodyLarge,
-    fontWeight: "600",
-    flex: 1,
-  },
-  demoCustomerType: {
-    ...TextStyles.caption,
-    fontWeight: "700",
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  demoCustomerPhone: {
-    ...TextStyles.bodySmall,
-    marginBottom: Spacing.xs,
-  },
-  demoCustomerPoints: {
-    ...TextStyles.bodySmall,
-    fontWeight: "600",
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xl },
+  brand: { alignItems: 'center', marginBottom: 28 },
+  logo: { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  logoText: { fontSize: 36, fontWeight: Typography.fontWeight.bold },
+  brandName: { fontSize: 30, fontWeight: Typography.fontWeight.bold },
+  tagline: { fontSize: 14, marginTop: 4 },
+  card: { borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, padding: 20 },
+  title: { fontSize: 18, fontWeight: Typography.fontWeight.bold, marginBottom: 16 },
+  label: { fontSize: 12, fontWeight: Typography.fontWeight.semibold, marginBottom: 6 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 14, overflow: 'hidden' },
+  prefix: { paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, fontWeight: Typography.fontWeight.semibold, borderRightWidth: 1 },
+  phoneInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16 },
+  nameInput: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16 },
+  error: { fontSize: 12, marginTop: 6 },
+  button: { marginTop: 20, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  buttonText: { fontSize: 16, fontWeight: Typography.fontWeight.semibold },
+  back: { alignItems: 'center', marginTop: 14 },
+  backText: { fontSize: 14, fontWeight: Typography.fontWeight.medium },
+  quick: { marginTop: 24 },
+  quickDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
+  line: { flex: 1, height: 1 },
+  quickLabel: { fontSize: 11, fontWeight: Typography.fontWeight.bold, letterSpacing: 1 },
+  quickCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, marginBottom: 10 },
+  avatar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 18, fontWeight: Typography.fontWeight.bold },
+  quickName: { fontSize: 15, fontWeight: Typography.fontWeight.semibold },
+  quickMeta: { fontSize: 12, marginTop: 2 },
+  go: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  goText: { fontSize: 13, fontWeight: Typography.fontWeight.bold },
 });
