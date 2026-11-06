@@ -1,7 +1,7 @@
 AISUPERMART - COMPLETE PRODUCT LIST FROM DATABASE
 ================================================
 
-You're absolutely right! Here's the COMPLETE list of products from your actual retail-sass database:
+You're absolutely right! Here's the COMPLETE list of products from your actual gogenie-retailer-portal database:
 
 DAIRY & BAKERY (7 products):
 1. Amul Fresh Milk 1L
@@ -85,7 +85,7 @@ RECOMMENDED IMAGE NAMING CONVENTION:
   * surf-excel-detergent.jpg
   * vim-dishwash-gel.jpg
 
-NOTE: This is the complete list from your retail-sass database seed file. The 20 products I showed earlier were from the mobile app's mock data, but your backend has these 32 products!
+NOTE: This is the complete list from your gogenie-retailer-portal database seed file. The 20 products I showed earlier were from the mobile app's mock data, but your backend has these 32 products!
 
 VARIANTS:
 Some products like Coca Cola, Sprite, Britannia Good Day, and Basmati Rice have multiple variants (different flavors, sizes) configured in your database.

@@ -1,10 +1,11 @@
+import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Supabase configuration (from .env.local)
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://vifafrkwcmsyjrfjfxbn.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpZmFmcmt3Y21zeWpyZmpmeGJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5MzQ4OTgsImV4cCI6MjA3NTUxMDg5OH0.oyG5FJf87E0rQNH_mMC5um46FdIku6ohlrSSLEkelns';
+// Supabase configuration (EXPO_PUBLIC_* values are baked in at build time: .env.local for dev, eas.json / EAS env for builds)
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 // Create a custom storage adapter for web
 const createWebStorage = () => {
@@ -27,15 +28,23 @@ const createWebStorage = () => {
 // Use web storage for web platform, AsyncStorage for native
 const storage = Platform.OS === 'web' ? createWebStorage() : AsyncStorage;
 
-// Create Supabase client with platform-specific storage for session persistence
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storage: storage as any,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+// Create the Supabase client with platform-specific storage for session persistence.
+// Without configuration there is no client: live order updates are skipped instead of crashing the app.
+export const supabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          storage: storage as any,
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
+
+if (!supabase) {
+  console.warn('Supabase is not configured (EXPO_PUBLIC_SUPABASE_URL / _ANON_KEY): live order updates are disabled.');
+}
 
 // Realtime channel types
 export type RealtimeOrderUpdate = {
@@ -56,6 +65,8 @@ export const subscribeToOrder = (
   orderId: number,
   callback: (payload: any) => void
 ) => {
+  if (!supabase) return null;
+
   const channel = supabase
     .channel(`order-${orderId}`)
     .on(
@@ -75,7 +86,7 @@ export const subscribeToOrder = (
 
 // Helper function to unsubscribe from order updates
 export const unsubscribeFromOrder = async (channel: any) => {
-  await supabase.removeChannel(channel);
+  if (supabase && channel) await supabase.removeChannel(channel);
 };
 
 export default supabase;

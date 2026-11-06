@@ -3,7 +3,7 @@
 ## Directory Overview
 
 ```
-aisupermart/
+gogenie-customer-app/
 ├── app/                        # Expo Router screens
 │   ├── (auth)/                # Authentication flow
 │   ├── (tabs)/                # Tab-based navigation

@@ -284,14 +284,14 @@ A comprehensive mobile platform that aggregates local supermarkets, enabling:
 ## 📞 Contact Information
 
 **For Investment Inquiries:**
-- Email: investors@aisupermart.com
+- Email: investors@gogenie-customer-app.com
 - Phone: +91 98765 43210
-- LinkedIn: /company/aisupermart
+- LinkedIn: /company/gogenie-customer-app
 
 **Technical Demo:**
 - App Store: [Download Link]
 - Play Store: [Download Link]
-- Web Demo: app.aisupermart.com
+- Web Demo: app.gogenie-customer-app.com
 
 ---
 

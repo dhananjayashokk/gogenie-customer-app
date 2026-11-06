@@ -42,7 +42,7 @@ export const ApiService = {
       return handleResponse(response);
     },
 
-    // Get all stores for customer using retail-sass customer API
+    // Get all stores for customer using gogenie-retailer-portal customer API
     getAllStores: async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/customer/stores`, {

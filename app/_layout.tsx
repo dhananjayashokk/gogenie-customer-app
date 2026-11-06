@@ -15,6 +15,7 @@ import { CartProvider } from '@/contexts/CartContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Loading } from '@/components/Loading';
+import { useOtaUpdate } from '@/hooks/useOtaUpdate';
 
 function AuthenticatedApp() {
   const colorScheme = useAppColorScheme();
@@ -63,6 +64,7 @@ function AuthenticatedApp() {
 }
 
 export default function RootLayout() {
+  useOtaUpdate();
   return (
     <ThemeProvider>
       <AuthProvider>

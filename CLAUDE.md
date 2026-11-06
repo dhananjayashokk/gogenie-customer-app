@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-AiSupermart (package name: `gogenie`) is an Indian supermarket aggregator mobile app built with React Native and Expo. It connects to a `retail-sass` backend API. The app supports phone number-based authentication (no OTP in primary flow — uses `authenticateWithMobile` which auto-registers or logs in).
+AiSupermart (package name: `gogenie-customer-app`) is an Indian supermarket aggregator mobile app built with React Native and Expo. It connects to a `gogenie-retailer-portal` backend API. The app supports phone number-based authentication (no OTP in primary flow — uses `authenticateWithMobile` which auto-registers or logs in).
 
 ## Commands
 ```bash
@@ -18,7 +18,7 @@ There are no automated tests in this project.
 
 ## Environment Setup
 Copy `.env.example` to `.env` and fill in values:
-- `EXPO_PUBLIC_API_URL` — base URL for the retail-sass backend (e.g. `http://localhost:3000/api`)
+- `EXPO_PUBLIC_API_URL` — base URL for the gogenie-retailer-portal backend (e.g. `http://localhost:3000/api`)
 - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase credentials (used in `services/supabase.ts`)
 
 All `EXPO_PUBLIC_*` vars are inlined at build time and accessible via `process.env.EXPO_PUBLIC_*`.
@@ -47,7 +47,7 @@ Three contexts, all provided in root layout:
 - Two base URL patterns: `API_BASE_URL` (e.g. `/api`) and `MOBILE_API_BASE_URL` (e.g. `/api/mobile`)
 
 ### Supabase Realtime (`services/supabase.ts`)
-Used exclusively for live order status updates. The main REST API is the retail-sass backend; Supabase is only for realtime.
+Used exclusively for live order status updates. The main REST API is the gogenie-retailer-portal backend; Supabase is only for realtime.
 - `subscribeToOrder(orderId, callback)` — subscribes to `postgres_changes` on `online_orders` table filtered by `id`
 - `unsubscribeFromOrder(channel)` — removes the channel
 - Storage adapter is platform-aware: `AsyncStorage` on native, `localStorage` on web
@@ -83,6 +83,26 @@ const colors = Colors[colorScheme];
 2. If not authenticated → auth stack shown (`auth/login` → `auth/onboarding` for new users)
 3. `authenticateWithMobile(phone)` → if new customer, backend returns error message containing "Name is required for new customer" → redirect to onboarding to collect name → retry with name
 4. On success → user saved to AsyncStorage, `isAuthenticated = true`, main tab navigator shown
+
+## Releasing (EAS Build + EAS Update)
+Builds and over-the-air updates are configured in `eas.json` (profiles `preview` = installable APK on channel `preview`, `production` = Play Store bundle on channel `production`) and `app.json` (`runtimeVersion: { policy: "appVersion" }`).
+
+One-time setup (needs an Expo account):
+```bash
+npm i -g eas-cli && eas login
+eas init                    # links this app to an Expo project (adds extra.eas.projectId)
+eas update:configure        # adds updates.url
+eas env:set --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --environment preview --visibility sensitive   # already done; also for production
+eas build -p android --profile preview   # the one APK people install by hand
+```
+
+Every release after that (JS / UI / logic changes):
+```bash
+eas update --channel preview --message "what changed"
+```
+Installed apps check on launch and when reopened (`useOtaUpdate`), download the update and offer "Restart".
+
+Native changes (new native library, permissions, icon/splash, Expo SDK upgrade): bump `version` in `app.json` (this changes the runtime version), then `eas build` again and reinstall. Updates published for the old version will not reach the new build and vice versa.
 
 ## Web Deployment
 Configured for Vercel via `vercel.json`. Build command: `npx expo export --platform web` → outputs to `dist/`. All routes rewrite to `index.html` (SPA mode). The app uses React Native New Architecture (`newArchEnabled: true` in `app.json`).

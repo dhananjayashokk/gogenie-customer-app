@@ -114,7 +114,7 @@ const initialState: AuthState = {
 // API Configuration - Use environment variable with fallback
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
-// Real API functions that connect to retail-sass backend
+// Real API functions that connect to gogenie-retailer-portal backend
 const sendOTPToBackend = async (
   phoneNumber: string
 ): Promise<{ success: boolean; message: string }> => {

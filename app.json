@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "gogenie",
-    "slug": "gogenie",
+    "name": "GoGenie Customer",
+    "slug": "gogenie-customer-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,14 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gogenie.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.gogenie.app"
     },
     "web": {
       "bundler": "metro",
@@ -38,6 +40,19 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ae7c4597-ad43-4254-afc8-77a3c78971b0"
+      }
+    },
+    "owner": "dhananjay1212",
+    "updates": {
+      "url": "https://u.expo.dev/ae7c4597-ad43-4254-afc8-77a3c78971b0"
     }
   }
 }
