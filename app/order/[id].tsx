@@ -195,8 +195,8 @@ export default function OrderTrackingScreen() {
   const paid = ['success', 'paid'].includes(String(order.paymentStatus).toLowerCase());
   const storeAddress = typeof order.store?.address === 'string' ? order.store.address : '';
 
-  // From "Out for delivery" on, the finished stages fold into one tappable row
-  const collapsible = !stopped && stepIndex >= 4;
+  // At every stage, the stages already finished fold into one tappable row (nothing to fold at the first step)
+  const collapsible = !stopped && stepIndex >= 1;
   const hiddenCount = collapsible && !showEarlierSteps ? stepIndex : 0;
 
   const timeFor = (index: number) => {
