@@ -43,6 +43,8 @@ interface AuthContextType {
     isNewCustomer?: boolean;
   }>;
   logout: () => Promise<void>;
+  /** Re-read the saved customer (used by pull-to-refresh on the profile screen) */
+  refreshUser: () => Promise<void>;
   // Legacy methods - will be deprecated
   sendOTP: (
     phoneNumber: string
@@ -440,10 +442,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      dispatch({ type: "RESTORE_USER", payload: userData ? (JSON.parse(userData) as User) : null });
+    } catch (error) {
+      console.error("Error refreshing user:", error);
+    }
+  };
+
   const value: AuthContextType = {
     state,
     authenticateWithMobile,
     logout,
+    refreshUser,
     // Legacy methods - will be deprecated
     sendOTP,
     verifyOTP,

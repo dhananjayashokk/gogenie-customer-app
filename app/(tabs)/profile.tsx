@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const THEMES = [
@@ -35,9 +35,16 @@ const formatPhone = (phone?: string) => {
 export default function ProfileScreen() {
   const { colorScheme, themePreference, setThemePreference } = useTheme();
   const colors = Colors[colorScheme];
-  const { state, logout } = useAuth();
+  const { state, logout, refreshUser } = useAuth();
   const { show: showToast } = useToast();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshUser();
+    setRefreshing(false);
+  };
 
   const comingSoon = () => showToast("This isn't available yet. Coming soon!", 'info');
 
@@ -76,7 +83,14 @@ export default function ProfileScreen() {
         <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
       </View>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         {/* Account card */}
         <View style={[styles.profileCard, { backgroundColor: colors.primary }]}>
           <View style={[styles.avatar, { backgroundColor: colors.textInverse + '26' }]}>

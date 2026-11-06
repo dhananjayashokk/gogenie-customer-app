@@ -14,7 +14,7 @@ import { ApiService } from '@/services/api';
 import { formatPrice } from '@/utils/product';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const FALLBACK_TAB_BAR_HEIGHT = 90;
@@ -24,11 +24,12 @@ export default function CartScreen() {
   const colorScheme = useAppColorScheme();
   const colors = Colors[colorScheme];
   const { show: showToast } = useToast();
-  const { state: cartState, updateQuantity, clearCart } = useCart();
+  const { state: cartState, updateQuantity, removeItem, clearCart } = useCart();
   const { height: measuredTabBarHeight } = useTabBarHeight();
   const tabBarHeight = measuredTabBarHeight || FALLBACK_TAB_BAR_HEIGHT;
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [note, setNote] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   const subtotal = cartState.totalAmount;
   // The server does not charge for delivery yet ("free delivery for now"), so neither does the bill.
@@ -37,6 +38,40 @@ export default function CartScreen() {
 
   const storeId = cartState.items[0]?.storeId;
   const storeName = cartState.items[0]?.storeName;
+
+  // Pull-to-refresh: check the items against the store's current stock and drop what is no longer available
+  const onRefresh = async () => {
+    if (!storeId) return;
+    setRefreshing(true);
+    try {
+      const limit = 100;
+      const response = await ApiService.products.getStoreProducts({
+        storeId: typeof storeId === 'string' ? parseInt(storeId) : storeId,
+        limit,
+      });
+      const products: any[] = response.products || [];
+      // Only trust the list when it is complete, otherwise a long catalog would look like "unavailable"
+      if (products.length < limit) {
+        const available = new Set(products.map((product) => String(product.id)));
+        const gone = cartState.items.filter((item) => !available.has(String(item.id)));
+        gone.forEach((item) => removeItem(item.id));
+        if (gone.length > 0) {
+          showToast(
+            gone.length === 1
+              ? `${gone[0].name} is no longer available and was removed`
+              : `${gone.length} items are no longer available and were removed`,
+            'info'
+          );
+        } else {
+          showToast('Your cart is up to date', 'success');
+        }
+      }
+    } catch {
+      showToast("Couldn't refresh your cart. Check your connection.", 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handlePlaceOrder = async () => {
     if (cartState.items.length === 0 || !storeId) {
@@ -128,6 +163,9 @@ export default function CartScreen() {
           contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: tabBarHeight + 110 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+          }
         >
           {/* Items */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
