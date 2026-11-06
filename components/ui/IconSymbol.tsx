@@ -56,6 +56,7 @@ const MAPPING = {
   'exclamationmark.triangle.fill': 'warning',
   'arrow.right.square': 'logout',
   'shield': 'security',
+  'circle': 'circle',
   'person.circle': 'account-circle',
   'building.2': 'business',
   'tag': 'local-offer',
